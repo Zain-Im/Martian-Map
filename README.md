@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 
 # MartianMap
 
@@ -128,3 +129,7 @@ Future development:
 - Elevation visualization.
 - Terrain analysis.
 - Route planning.
+=======
+# Martian-Map
+Jezero Crater multi-layered map
+>>>>>>> b252d8d6981b33a8004d6ecde897f1fcb8a3b36a
