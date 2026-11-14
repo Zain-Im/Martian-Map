@@ -6,72 +6,118 @@ MartianMap - Map display
 
 from qgis.PyQt.QtGui import QColor
 from qgis.PyQt.QtCore import pyqtSignal, Qt, QPoint
-
+from qgis.core import QgsProject, QgsRectangle
 from qgis.gui import (
     QgsMapCanvas,
-    QgsMapToolPan,
+    QgsMapTool,
     QgsMapToolEmitPoint,
     QgsVertexMarker
 )
 
-from qgis.core import QgsProject
-
-class WaypointPanTool(QgsMapToolPan):
+class WaypointPanTool(QgsMapTool):
 
     def __init__(self, canvas):
         super().__init__(canvas)
 
         self.canvas = canvas
-        self.press_position = None
+        self.start_position = None
+        self.start_extent = None
+        self.dragging = False
+
+        self.canvas.setCursor(Qt.OpenHandCursor)
 
     def canvasPressEvent(self, event):
 
-        self.press_position = event.pos()
+        if event.button() != Qt.LeftButton:
+            return
 
-        super().canvasPressEvent(event)
+        # Record the starting mouse position and map extent.
+        self.start_position = event.pos()
+        self.start_extent = self.canvas.extent()
+
+        self.dragging = False
+
+    def canvasMoveEvent(self, event):
+
+        if self.start_position is None:
+            return
+
+        if not (event.buttons() & Qt.LeftButton):
+            return
+
+        # Calculate the mouse movement.
+        dx = event.pos().x() - self.start_position.x()
+        dy = event.pos().y() - self.start_position.y()
+
+        # Only start panning after the mouse has moved.
+        if abs(dx) > 5 or abs(dy) > 5:
+            self.dragging = True
+
+        if self.dragging:
+
+            self.canvas.setCursor(Qt.ClosedHandCursor)
+
+            # Convert pixel movement into map coordinates.
+            scale = self.canvas.mapSettings().mapUnitsPerPixel()
+
+            x_offset = dx * scale
+            y_offset = dy * scale
+
+            # Move the map in the direction of the mouse.
+            new_extent = QgsRectangle(
+                self.start_extent.xMinimum() - x_offset,
+                self.start_extent.yMinimum() + y_offset,
+                self.start_extent.xMaximum() - x_offset,
+                self.start_extent.yMaximum() + y_offset
+            )
+
+            self.canvas.setExtent(new_extent)
 
     def canvasReleaseEvent(self, event):
 
-        # Check whether the user clicked rather than dragged.
-        is_click = False
-
-        if self.press_position is not None:
-
-            distance = (
-                event.pos() - self.press_position
-            ).manhattanLength()
-
-            if distance < 5 and event.button() == Qt.LeftButton:
-                is_click = True
-
-        # Preserve the normal pan behavior.
-        super().canvasReleaseEvent(event)
-
-        if not is_click:
+        if self.start_position is None:
             return
 
-        # Check whether the click was close to a saved waypoint.
-        click_position = event.pos()
+        if not self.dragging:
 
-        for marker, waypoint in self.canvas.waypoint_markers:
+            # Check whether a saved waypoint was clicked.
+            click_position = event.pos()
 
-            marker_position = self.canvas.getCoordinateTransform().transform(
-                marker.center()
-            )
+            for marker, waypoint in self.canvas.waypoint_markers:
 
-            marker_position = QPoint(
-                round(marker_position.x()),
-                round(marker_position.y())
-            )
-            distance = (
-                click_position - marker_position
-            ).manhattanLength()
+                marker_position = (
+                    self.canvas.getCoordinateTransform().transform(
+                        marker.center()
+                    )
+                )
 
-            if distance <= 20:
+                marker_position = QPoint(
+                    round(marker_position.x()),
+                    round(marker_position.y())
+                )
 
-                self.canvas.select_waypoint(marker, waypoint)
-                break
+                distance = (
+                    click_position - marker_position
+                ).manhattanLength()
 
+                if distance <= 20:
+
+                    self.canvas.select_waypoint(
+                        marker,
+                        waypoint
+                    )
+
+                    break
+        if self.dragging:
+            self.canvas.refresh()
+            
+        # Reset the interaction state.
+        self.start_position = None
+        self.start_extent = None
+        self.dragging = False
+
+        self.canvas.setCursor(Qt.OpenHandCursor)
+        
 class MapCanvas(QgsMapCanvas):
 
     # Signal emitted when the user selects a location.
