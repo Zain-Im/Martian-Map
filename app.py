@@ -1,3 +1,7 @@
+"""
+MartianMap - Primary Application 
+"""
+
 from qgis.PyQt.QtWidgets import (
     QMainWindow,
     QWidget,
