@@ -1,0 +1,7 @@
+
+# MartianMap dependencies
+
+# PyQGIS is provided by the QGIS Desktop installation.
+
+# Optional testing framework:
+# pytest
