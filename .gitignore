@@ -1,0 +1,55 @@
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE settings
+.vscode/
+.idea/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Python testing and build files
+.pytest_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Environment variables
+.env
+.env.*
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# QGIS backup files
+*.qgs~
+*.qgz~
+*.qgd
+*.qgs.bak
+*.qgz.bak
+
+# Raster auxiliary files
+*.aux.xml
+*.ovr
+
+# Large original datasets
+data/raw/
+
+# Temporary GIS data
+data/temporary/

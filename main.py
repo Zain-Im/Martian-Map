@@ -11,7 +11,7 @@ from app import MartianMapWindow
 
 def main():
     # Initialize QGIS without launching its desktop interface.
-    qgs = QgsApplication(sys.argv, False)
+    qgs = QgsApplication([], True)
     qgs.initQgis()
 
     # Create and display our application.
