@@ -7,9 +7,21 @@ import sys
 
 from qgis.core import QgsApplication
 from app import MartianMapWindow
+from map_proccesing import Traversability
 
 
 def main():
+
+    # Generate the traversability raster.
+    traversability = Traversability()
+
+    print("Calculating slope and roughness...")
+
+    saved_path = traversability.generate()
+
+    print("Finished!")
+    print(f"Saved to: {saved_path}")
+
     # Initialize QGIS without launching its desktop interface.
     qgs = QgsApplication([], True)
     qgs.initQgis()
