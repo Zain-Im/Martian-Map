@@ -78,6 +78,9 @@ class LayerManager:
         if layer_name == "Geology":
             self.apply_geology_symbology(layer)
 
+        if layer_name == "Traversability":
+            self.apply_traversability_symbology(layer)
+
         if display:
             self.show_layers([layer_name])
 
@@ -146,6 +149,7 @@ class LayerManager:
         layer.triggerRepaint()
 
         print("Elevation symbology applied successfully.")
+
     def apply_geology_symbology(self, layer):
         """Apply categorized colours based on geological names."""
 
@@ -219,6 +223,46 @@ class LayerManager:
         )
 
         layer.setRenderer(renderer)
+
+
+    def apply_traversability_symbology(self, layer):
+
+        shader = QgsColorRampShader()
+        shader.setColorRampType(QgsColorRampShader.Interpolated)
+        shader.setMinimumValue(0)
+        shader.setMaximumValue(1)
+
+        colors = [
+            QgsColorRampShader.ColorRampItem(
+                0.0, QColor("#559455"), "0.0000"
+            ),
+            QgsColorRampShader.ColorRampItem(
+                0.5, QColor("#F7E164"), "0.5000"
+            ),
+            QgsColorRampShader.ColorRampItem(
+                0.9999, QColor("#EF9819"), "0.9999"
+            ),
+            QgsColorRampShader.ColorRampItem(
+                1.0, QColor("#A80407"), "1.0000"
+            )
+        ]
+
+        shader.setColorRampItemList(colors)
+
+        raster_shader = QgsRasterShader()
+        raster_shader.setRasterShaderFunction(shader)
+
+        renderer = QgsSingleBandPseudoColorRenderer(
+            layer.dataProvider(),
+            1,
+            raster_shader
+        )
+
+        renderer.setClassificationMin(0)
+        renderer.setClassificationMax(1)
+
+        layer.setRenderer(renderer)
+        layer.triggerRepaint()
 
 
     def remove_layer(self, layer_id):

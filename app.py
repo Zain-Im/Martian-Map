@@ -195,6 +195,10 @@ class MartianMapWindow(QMainWindow):
             "geology_map.gpkg"
         )
 
+        traversability_path = os.path.join(
+            data_dir, "Traversability.tif"
+        )
+
         # Load the elevation raster.
         elevation_layer = self.layer_manager.load_layer(
             elevation_path,
@@ -212,6 +216,11 @@ class MartianMapWindow(QMainWindow):
         geology_layer = self.layer_manager.load_layer(
             geology_path,
             "Geology"
+        )
+
+        traversability_layer = self.layer_manager.load_layer(
+            traversability_path,
+            "Traversability"
         )
 
         # Display elevation by default.
@@ -233,6 +242,9 @@ class MartianMapWindow(QMainWindow):
 
         if geology_layer is None:
             print("Geology map could not be loaded.")
+
+        if traversability_layer is None:
+            print("Traversability map could not be loaded.")
 
     def start_astronaut_selection(self):
 
@@ -570,6 +582,7 @@ class MartianMapWindow(QMainWindow):
         self.elevation_button = QPushButton("Elevation Map")
         self.optical_button = QPushButton("Optical Map")
         self.geology_button = QPushButton("Geology Map")
+        self.traversability_button = QPushButton("Traversability Map")
 
         self.elevation_button.setStyleSheet("""
             font-size: 15px;
@@ -580,7 +593,13 @@ class MartianMapWindow(QMainWindow):
             font-size: 15px;
             font-weight: bold;
         """)
+
         self.geology_button.setStyleSheet("""
+            font-size: 15px;
+            font-weight: bold;
+        """)
+
+        self.traversability_button.setStyleSheet("""
             font-size: 15px;
             font-weight: bold;
         """)
@@ -588,6 +607,7 @@ class MartianMapWindow(QMainWindow):
         layout.addWidget(self.elevation_button)
         layout.addWidget(self.optical_button)
         layout.addWidget(self.geology_button)
+        layout.addWidget(self.traversability_button)
         
         # Map legend section
         layout.addSpacing(10)
@@ -630,6 +650,10 @@ class MartianMapWindow(QMainWindow):
 
         self.geology_button.clicked.connect(
             self.show_geology_map
+        )
+
+        self.traversability_button.clicked.connect(
+            self.show_traversability_map
         )
 
         layout.addSpacing(20)
@@ -876,6 +900,16 @@ class MartianMapWindow(QMainWindow):
             self.layer_manager.show_layers(["Geology"])
             self.update_map_legend("Geology")
             self.status_label.setText("Geology map displayed")
+
+    def show_traversability_map(self):
+
+        layer = self.layer_manager.get_layer("Traversability")
+        
+        if layer is not None:
+                        
+            self.layer_manager.show_layers(["Traversability"])
+            self.update_map_legend("Traversability")
+            self.status_label.setText("Traversability map Displayed")
 
     def create_info_panel(self):
 
