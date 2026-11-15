@@ -48,12 +48,11 @@ dist/
 *.aux.xml
 *.ovr
 
-# Keep raster datasets out of Git (including mixed-case extensions).
-*.[tT][iI][fF]
-*.[tT][iI][fF][fF]
-
-# Large original datasets
-data/raw/
+# Original TIFF datasets are tracked through Git LFS (.gitattributes).
+# Keep generated rasters and processed copies local.
+data/processed/
+data/raw/[tT]raversability.[tT][iI][fF]
+data/raw/[tT]raversability.[tT][iI][fF][fF]
 
 # Temporary GIS data
 data/temporary/
