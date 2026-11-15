@@ -33,6 +33,8 @@ from qgis.core import (
 
 from layer_manager import LayerManager
 from map_canvas import MapCanvas
+from permanent_waypoints import PermanentWaypoints
+from description_edit import DescriptionEdit
 
 
 class MartianMapWindow(QMainWindow):
@@ -175,6 +177,8 @@ class MartianMapWindow(QMainWindow):
 
         # Load the initial Mars elevation map.
         self.load_initial_map()
+        self.permanent_waypoints = PermanentWaypoints()
+        self.permanent_waypoints.insert(self)
     
     def load_initial_map(self):
 
@@ -216,6 +220,7 @@ class MartianMapWindow(QMainWindow):
         )
         if elevation_layer is not None:
             QgsProject.instance().setCrs(elevation_layer.crs())
+            self.map_canvas.setDestinationCrs(elevation_layer.crs())
 
         # Load the optical raster.
         optical_layer = self.layer_manager.load_layer(
@@ -475,7 +480,10 @@ class MartianMapWindow(QMainWindow):
         self.waypoint_traversability.setText(traversability)
 
         # Reset the name field for the new selection.
+        self.waypoint_name_input.setReadOnly(False)
         self.waypoint_name_input.clear()
+        self.waypoint_description_input.setReadOnly(False)
+        self.waypoint_description_input.clear()
 
         # Enable saving now that a location has been selected.
         self.save_waypoint_button.setEnabled(True)
@@ -493,6 +501,9 @@ class MartianMapWindow(QMainWindow):
 
         waypoint = self.selected_waypoint
 
+        if waypoint.get("permanent", False):
+            return
+
         self.waypoints.remove(waypoint)
         self.map_canvas.remove_waypoint_marker(waypoint)
 
@@ -500,7 +511,10 @@ class MartianMapWindow(QMainWindow):
         self.delete_waypoint_button.setEnabled(False)
 
         # Clear the waypoint information.
+        self.waypoint_name_input.setReadOnly(False)
         self.waypoint_name_input.clear()
+        self.waypoint_description_input.clear()
+        self.waypoint_description_input.setReadOnly(False)
         self.waypoint_coordinates.setText("Not selected")
         self.waypoint_elevation.setText("Unavailable")
         self.waypoint_traversability.setText("Not evaluated")
@@ -519,11 +533,12 @@ class MartianMapWindow(QMainWindow):
 
         # Assign a default name if none was entered.
         if name == "":
-            name = f"Waypoint {len(self.waypoints) + 1}"
+            name = f"Waypoint {sum(not p.get('permanent', False) for p in self.waypoints) + 1}"
 
         # Add the waypoint to the saved list.
         waypoint = self.pending_waypoint.copy()
         waypoint["name"] = name
+        waypoint["description"] = self.waypoint_description_input.toPlainText()[:250]
 
         self.waypoints.append(waypoint)
         self.map_canvas.save_waypoint_marker(waypoint)
@@ -531,11 +546,20 @@ class MartianMapWindow(QMainWindow):
         # Clear the pending waypoint.
         self.pending_waypoint = None
 
+        self.selected_waypoint = waypoint
+        self.delete_waypoint_button.setEnabled(True)
+
         # Disable saving until another location is selected.
         self.save_waypoint_button.setEnabled(False)
 
         # Update the status bar.
         self.status_label.setText(f"Saved {name}")
+
+    def update_waypoint_description(self, text):
+        """Save user edits immediately, without modifying predefined descriptions."""
+        waypoint = self.selected_waypoint
+        if waypoint is not None and not waypoint.get("permanent", False):
+            waypoint["description"] = text[:250]
 
     def handle_saved_waypoint_selection(self, waypoint):
         if self.route_selection_mode:
@@ -552,9 +576,13 @@ class MartianMapWindow(QMainWindow):
         self.pending_waypoint = None
 
         # Display the selected waypoint's name.
+        self.selected_waypoint = waypoint
+        self.waypoint_name_input.setReadOnly(waypoint.get("permanent", False))
         self.waypoint_name_input.setText(
             waypoint["name"]
         )
+        self.waypoint_description_input.setReadOnly(waypoint.get("permanent", False))
+        self.waypoint_description_input.setPlainText(waypoint.get("description", ""))
 
         # Display its coordinates.
         self.waypoint_coordinates.setText(
@@ -583,7 +611,7 @@ class MartianMapWindow(QMainWindow):
         # Disable saving because this waypoint already exists.
         self.save_waypoint_button.setEnabled(False)
         self.selected_waypoint = waypoint
-        self.delete_waypoint_button.setEnabled(True)
+        self.delete_waypoint_button.setEnabled(not waypoint.get("permanent", False))
 
         # Display the information panel.
         self.info_panel.show()
@@ -1082,6 +1110,29 @@ class MartianMapWindow(QMainWindow):
 
         layout.addWidget(self.waypoint_name_input)
 
+        layout.addSpacing(10)
+
+        description_title = QLabel("Description")
+        description_title.setStyleSheet(label_style)
+        layout.addWidget(description_title)
+        self.waypoint_description_input = DescriptionEdit()
+        self.waypoint_description_input.setStyleSheet(
+            "background-color: #293B4F; color: #E6EDF3; font-size: 15px; "
+            "border: 1px solid #40566D; border-radius: 5px; padding: 7px;"
+        )
+        self.waypoint_description_input.setPlaceholderText("Enter a description (up to 250 characters)")
+        self.waypoint_description_input.textChanged.connect(
+            lambda: self.update_waypoint_description(self.waypoint_description_input.toPlainText())
+        )
+        layout.addWidget(self.waypoint_description_input)
+        self.waypoint_description_count = QLabel("0 / 250")
+        self.waypoint_description_count.setStyleSheet(label_style)
+        self.waypoint_description_input.textChanged.connect(
+            lambda: self.waypoint_description_count.setText(
+                f"{len(self.waypoint_description_input.toPlainText())} / 250"
+            )
+        )
+        layout.addWidget(self.waypoint_description_count)
         layout.addSpacing(10)
 
         # Coordinates

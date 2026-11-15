@@ -177,6 +177,8 @@ class MapCanvas(QgsMapCanvas):
         self.preview_marker = None
 
     def remove_waypoint_marker(self, waypoint):
+        if waypoint.get("permanent", False):
+            return
         for marker, saved_waypoint in self.waypoint_markers:
             if saved_waypoint == waypoint:
                 self.scene().removeItem(marker)
@@ -191,20 +193,19 @@ class MapCanvas(QgsMapCanvas):
         # Reset the previously selected marker.
         if self.selected_waypoint_marker is not None:
 
-            self.selected_waypoint_marker.setColor(
-                QColor("#E9A96B")
-            )
-
-            self.selected_waypoint_marker.setFillColor(
-                QColor("#E9A96B")
-            )
+            previous = next((p for m, p in self.waypoint_markers
+                             if m is self.selected_waypoint_marker), {})
+            color = QColor(previous.get("color", "#E9A96B"))
+            self.selected_waypoint_marker.setColor(color)
+            self.selected_waypoint_marker.setFillColor(color)
 
             self.selected_waypoint_marker.setIconSize(14)
             self.selected_waypoint_marker.setPenWidth(3)
 
         # Highlight the newly selected marker.
-        marker.setColor(QColor("#F4D35E"))
-        marker.setFillColor(QColor("#F4D35E"))
+        color = waypoint.get("color", "#E9A96B") if waypoint.get("permanent") else "#F4D35E"
+        marker.setColor(QColor(color))
+        marker.setFillColor(QColor(color))
         marker.setIconSize(20)
         marker.setPenWidth(4)
 
@@ -212,6 +213,20 @@ class MapCanvas(QgsMapCanvas):
 
         # Send the selected waypoint information to app.py.
         self.waypoint_selected.emit(waypoint)
+
+    def add_waypoint_marker(self, waypoint):
+        """Insert a saved waypoint without using the user's preview marker."""
+        marker = QgsVertexMarker(self)
+        color = QColor(waypoint.get("color", "#E9A96B"))
+        marker.setColor(color)
+        marker.setFillColor(color)
+        marker.setIconType(QgsVertexMarker.ICON_CIRCLE)
+        marker.setIconSize(14)
+        marker.setPenWidth(3)
+        marker.setCenter(waypoint["point"])
+        marker.show()
+        self.waypoint_markers.append((marker, waypoint))
+        return marker
 
     def set_astronaut_marker(self, point):
 
