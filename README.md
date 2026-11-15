@@ -1,5 +1,3 @@
-<<<<<<< HEAD
-
 # MartianMap
 
 A desktop Martian mapping application developed
@@ -30,11 +28,14 @@ datasets of Mars into one interactive map.
 ```text
 MartianMap/
 │
-├── main.py
-├── app.py
-├── map_canvas.py
-├── layer_manager.py
-├── map_controls.py
+├── src/
+│   ├── __init__.py
+│   ├── main.py
+│   ├── app.py
+│   ├── map_canvas.py
+│   ├── layer_manager.py
+│   ├── map_controls.py
+│   └── map_proccesing.py
 │
 ├── data/
 │   ├── raw/
@@ -64,24 +65,40 @@ cd MartianMap
 
 ### 3. Run the application
 
-PyQGIS requires the Python environment
-provided by the QGIS installation.
+Use a Python environment configured for PyQGIS, such as the QGIS
+installation's environment or the configured `marsmap` Conda environment.
 
 On Windows, open the OSGeo4W Shell,
 navigate to the repository and run:
 
 ```bash
-python main.py
+python -m src.main
 ```
 
 Do not use an ordinary Python interpreter
 unless it has been configured for PyQGIS.
+
+In PowerShell with the configured Conda environment, run from the repository root:
+
+```powershell
+conda activate marsmap
+python -m src.main
+```
+
+Use the module command above rather than running `src/main.py` directly;
+the application uses package-relative imports.
 
 ## Map Data
 
 Place original downloaded datasets in:
 
 `data/raw/`
+
+The application expects `elevation_map.tif`, `optical_map.tif`, and
+`geology_map.gpkg` in that directory. Elevation is required for processing;
+missing optical or geology layers are reported and skipped. Startup writes
+`Traversability.tif` to the same directory. These paths are relative to the
+repository root, not `src/`.
 
 Place prepared datasets in:
 
@@ -129,7 +146,3 @@ Future development:
 - Elevation visualization.
 - Terrain analysis.
 - Route planning.
-=======
-# Martian-Map
-Jezero Crater multi-layered map
->>>>>>> b252d8d6981b33a8004d6ecde897f1fcb8a3b36a

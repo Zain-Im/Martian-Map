@@ -6,8 +6,8 @@ MartianMap - Application entry point
 import sys
 
 from qgis.core import QgsApplication
-from app import MartianMapWindow
-from map_proccesing import Traversability
+from .app import MartianMapWindow
+from .map_proccesing import Traversability
 
 
 def main():

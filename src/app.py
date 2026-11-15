@@ -16,6 +16,7 @@ from qgis.PyQt.QtWidgets import (
 )
 
 import os
+from pathlib import Path
 
 from qgis.PyQt.QtGui import QColor
 from qgis.PyQt.QtCore import Qt
@@ -29,8 +30,8 @@ from qgis.core import (
     QgsPointXY
 )
 
-from layer_manager import LayerManager
-from map_canvas import MapCanvas
+from .layer_manager import LayerManager
+from .map_canvas import MapCanvas
 
 
 class MartianMapWindow(QMainWindow):
@@ -172,7 +173,7 @@ class MartianMapWindow(QMainWindow):
     
     def load_initial_map(self):
 
-        project_dir = os.path.dirname(os.path.abspath(__file__))
+        project_dir = Path(__file__).resolve().parent.parent
 
         data_dir = os.path.join(
             project_dir,
