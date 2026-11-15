@@ -16,6 +16,7 @@ from qgis.PyQt.QtWidgets import (
 )
 
 import os
+import numpy as np
 from pathlib import Path
 
 from qgis.PyQt.QtGui import QColor
@@ -397,14 +398,28 @@ class MartianMapWindow(QMainWindow):
 
                     geology = feature["name"]
                     break
-                
+        # Retrieve traversability at waypoint.
+        traversability = "Unavailable"
+
+        traversability_layer = self.layer_manager.get_layer("Traversability")
+
+        if traversability_layer is not None:
+
+            provider = traversability_layer.dataProvider()
+
+            value, success = provider.sample(point, 1)
+
+            if success and np.isfinite(value) and 0 <= value <= 1:
+                traversability = self.classify_traversability(value)
+
         # Store the selected location as a pending waypoint.
         self.pending_waypoint = {
             "point": point,
             "x": x,
             "y": y,
             "elevation": elevation,
-            "geology": geology
+            "geology": geology,
+            "traversability": traversability
         }
 
         self.map_canvas.show_waypoint_preview(point)
@@ -422,6 +437,8 @@ class MartianMapWindow(QMainWindow):
             self.waypoint_elevation.setText("Unavailable")
 
         self.waypoint_geology.setText(str(geology))
+
+        self.waypoint_traversability.setText(traversability)
 
         # Reset the name field for the new selection.
         self.waypoint_name_input.clear()
@@ -513,7 +530,7 @@ class MartianMapWindow(QMainWindow):
 
         # Display the other information.
         self.waypoint_traversability.setText(
-            "Not evaluated"
+            waypoint.get("traversability", "Unavailable")
         )
 
         self.waypoint_geology.setText(
@@ -621,7 +638,7 @@ class MartianMapWindow(QMainWindow):
         self.legend_scroll = QScrollArea()
         self.legend_scroll.setWidgetResizable(True)
         self.legend_scroll.setFrameShape(QFrame.NoFrame)
-        self.legend_scroll.setMaximumHeight(260)
+        self.legend_scroll.setMinimumHeight(260)
 
         self.legend_content = QWidget()
 
@@ -747,7 +764,11 @@ class MartianMapWindow(QMainWindow):
         return map_panel
     
     def update_map_legend(self, map_type):
-
+        # Adjust legend height depending on the map.
+        if map_type == "Geology":
+            self.legend_scroll.setMinimumHeight(350)
+        else:
+            self.legend_scroll.setMinimumHeight(180)
         # Remove all previous legend contents.
         while self.legend_content_layout.count():
 
@@ -771,33 +792,34 @@ class MartianMapWindow(QMainWindow):
             maximum_label = QLabel("-2391 m")
             maximum_label.setStyleSheet("""
                 color: #263238;
-                font-size: 14px;
+                font-size: 13px;
                 font-weight: bold;
-            """)            
+            """)
+
             self.legend_content_layout.addWidget(
                 maximum_label,
-                alignment=Qt.AlignHCenter
+                alignment=Qt.AlignRight
             )
 
-            # Vertical elevation gradient.
+            # Horizontal elevation gradient.
             gradient = QFrame()
-            gradient.setFixedSize(30, 150)
+            gradient.setFixedSize(210, 22)
             gradient.setStyleSheet("""
                 background: qlineargradient(
-                    x1: 0, y1: 0, x2: 0, y2: 1,
-                    stop: 0 #D73D30,
-                    stop: 0.08 #BB3028,
-                    stop: 0.17 #A54830,
-                    stop: 0.25 #966039,
-                    stop: 0.33 #BB8140,
-                    stop: 0.42 #DFA74A,
+                    x1: 0, y1: 0, x2: 1, y2: 0,
+                    stop: 0 #000000,
+                    stop: 0.08 #263B28,
+                    stop: 0.17 #355E36,
+                    stop: 0.25 #4E8242,
+                    stop: 0.33 #82A650,
+                    stop: 0.42 #C2C35B,
                     stop: 0.5 #E5CB55,
-                    stop: 0.58 #C2C35B,
-                    stop: 0.67 #82A650,
-                    stop: 0.75 #4E8242,
-                    stop: 0.83 #355E36,
-                    stop: 0.92 #263B28,
-                    stop: 1 #000000
+                    stop: 0.58 #DFA74A,
+                    stop: 0.67 #BB8140,
+                    stop: 0.75 #966039,
+                    stop: 0.83 #A54830,
+                    stop: 0.92 #BB3028,
+                    stop: 1 #D73D30
                 );
                 border: 1px solid #59636E;
                 border-radius: 3px;
@@ -812,12 +834,12 @@ class MartianMapWindow(QMainWindow):
             minimum_label = QLabel("-2652 m")
             minimum_label.setStyleSheet("""
                 color: #263238;
-                font-size: 14px;
+                font-size: 13px;
                 font-weight: bold;
-            """)            
+            """)
             self.legend_content_layout.addWidget(
                 minimum_label,
-                alignment=Qt.AlignHCenter
+                alignment=Qt.AlignLeft
             )
 
         # Geology map legend.
@@ -863,6 +885,54 @@ class MartianMapWindow(QMainWindow):
                         row.addWidget(name_label, 1)
 
                         self.legend_content_layout.addLayout(row)
+
+                # Traversability map legend.
+        elif map_type == "Traversability":
+
+            # Maximum traversability cost.
+            maximum_label = QLabel("1.0 - Untraversable")
+            maximum_label.setStyleSheet("""
+                color: #263238;
+                font-size: 13px;
+                font-weight: bold;
+            """)
+            self.legend_content_layout.addWidget(
+                maximum_label,
+                alignment=Qt.AlignRight
+            )
+
+            # Horizontal traversability gradient.
+            gradient = QFrame()
+            gradient.setFixedSize(210, 22)
+            gradient.setStyleSheet("""
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 0,
+                    stop: 0 #559455,
+                    stop: 0.5 #F7E164,
+                    stop: 0.9 #EF9819,
+                    stop: 1 #A80407
+                );
+                border: 1px solid #59636E;
+                border-radius: 3px;
+            """)
+
+            self.legend_content_layout.addWidget(
+                gradient,
+                alignment=Qt.AlignHCenter
+            )
+
+            # Minimum traversability cost.
+            minimum_label = QLabel("0.0 - Traversable")
+            minimum_label.setStyleSheet("""
+                color: #263238;
+                font-size: 13px;
+                font-weight: bold;
+            """)
+
+            self.legend_content_layout.addWidget(
+                minimum_label,
+                alignment=Qt.AlignLeft
+            )
 
         # Optical map has no legend.
         else:
@@ -912,6 +982,14 @@ class MartianMapWindow(QMainWindow):
             self.update_map_legend("Traversability")
             self.status_label.setText("Traversability map Displayed")
 
+    def classify_traversability(self, value):
+
+        if value < 0.5:
+            return "Traversable"
+        elif value < 1.0:
+            return "Difficult"
+        else:
+            return "Untraversable"
     def create_info_panel(self):
 
         panel = QFrame()
