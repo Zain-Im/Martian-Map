@@ -3,6 +3,7 @@ from osgeo import gdal
 from pathlib import Path
 from time import perf_counter
 import numpy as np
+from scipy import ndimage
 
 gdal.UseExceptions()
 
@@ -340,6 +341,74 @@ class Traversability:
         self.log(f"Output raster saved: {output_path}")
         return output_path
 
+    def mark_enclosed_regions(self, output_path):
+        """Label non-blocked cells once with four-neighbor connectivity. Unknown
+        cells participate in labeling, but any component containing one is
+        protected. Thus unknown terrain can never act as a proven wall.
+        """
+        self.log("Finding enclosed terrain regions...")
+        dataset = gdal.Open(str(output_path), gdal.GA_Update)
+        band = None
+        try:
+            band = dataset.GetRasterBand(1)
+            nodata = band.GetNoDataValue()
+            width, height = dataset.RasterXSize, dataset.RasterYSize
+
+            def blocks():
+                for y in range(0, height, self.block_size):
+                    for x in range(0, width, self.block_size):
+                        w = min(self.block_size, width - x)
+                        h = min(self.block_size, height - y)
+                        values = band.ReadAsArray(x, y, w, h)
+                        valid = np.isfinite(values)
+                        if nodata is not None:
+                            valid &= values != nodata
+                        valid &= band.GetMaskBand().ReadAsArray(x, y, w, h) != 0
+                        yield x, y, values, valid
+
+            passable = np.empty((height, width), dtype=bool)
+            for x, y, values, valid in blocks():
+                h, w = values.shape
+                passable[y:y+h, x:x+w] = ~valid | (values < 1.0)
+
+            labels = np.empty((height, width), dtype=np.int32)
+            structure = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]], dtype=bool)
+            count = ndimage.label(passable, structure=structure, output=labels)
+            del passable
+            self.log(f"Labeled {count} connected regions; checking boundaries and NoData...")
+
+            # Direct label indexing avoids sorting or scanning once per region.
+            open_region = np.zeros(count + 1, dtype=bool)
+            open_region[0] = True  # Label zero is already blocked terrain.
+            open_region[labels[0, :]] = True
+            open_region[labels[-1, :]] = True
+            open_region[labels[:, 0]] = True
+            open_region[labels[:, -1]] = True
+            for x, y, values, valid in blocks():
+                h, w = values.shape
+                local_labels = labels[y:y+h, x:x+w]
+                open_region[local_labels[~valid]] = True
+
+            enclosed_count = int(np.count_nonzero(~open_region))
+            changed = 0
+            for x, y, values, valid in blocks():
+                h, w = values.shape
+                enclosed = valid & ~open_region[labels[y:y+h, x:x+w]]
+                pixels = int(np.count_nonzero(enclosed))
+                if pixels:
+                    values[enclosed] = 1.0
+                    band.WriteArray(values, x, y)
+                    changed += pixels
+            dataset.SetMetadataItem("ENCLOSURE_CONNECTIVITY", "4")
+            dataset.SetMetadataItem("ENCLOSED_REGIONS_FILLED", str(enclosed_count))
+            dataset.SetMetadataItem("ENCLOSED_PIXELS_FILLED", str(changed))
+            dataset.FlushCache()
+            self.log(f"Marked {changed} cells in {enclosed_count} enclosed regions untraversable.")
+            return changed
+        finally:
+            band = None
+            dataset = None
+
     def generate(self):
         """Run the complete traversability generation process."""
 
@@ -363,6 +432,9 @@ class Traversability:
                 self.output_path
             )
 
+            # Release full-size derivative rasters before allocating region labels.
+            slope = roughness = dem = None
+            self.mark_enclosed_regions(output_path)
             self.log("Processing finished.")
             return output_path
 
