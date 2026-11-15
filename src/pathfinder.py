@@ -1,0 +1,291 @@
+
+import heapq
+import math
+from itertools import count
+from collections import OrderedDict
+from pathlib import Path
+
+import numpy as np
+from osgeo import gdal
+
+gdal.UseExceptions()
+
+
+class Pathfinder:
+
+    def __init__(self, raster_path, alpha=4.0, cache_blocks=64):
+
+        self.raster_path = Path(raster_path)
+        self.alpha = alpha
+        self.cache_blocks = cache_blocks
+
+        self.dataset = gdal.Open(
+            str(self.raster_path),
+            gdal.GA_ReadOnly
+        )
+
+        if self.dataset is None:
+            raise FileNotFoundError(
+                f"Could not open traversability raster: {self.raster_path}"
+            )
+
+        self.band = self.dataset.GetRasterBand(1)
+
+        self.width = self.dataset.RasterXSize
+        self.height = self.dataset.RasterYSize
+
+        self.geotransform = self.dataset.GetGeoTransform()
+
+        self.nodata = self.band.GetNoDataValue()
+
+        self.block_width, self.block_height = self.band.GetBlockSize()
+
+        self.block_cache = OrderedDict()
+
+        # Calculate the inverse geotransform.
+        gt = self.geotransform
+
+        determinant = gt[1] * gt[5] - gt[2] * gt[4]
+
+        if determinant == 0:
+            raise ValueError("Invalid raster geotransform")
+
+        self.inverse_determinant = 1.0 / determinant
+
+    def close(self):
+
+        self.band = None
+        self.dataset = None
+        self.block_cache.clear()
+
+    def get_pixel(self, x, y):
+
+        gt = self.geotransform
+
+        dx = x - gt[0]
+        dy = y - gt[3]
+
+        column = int(
+            (dx * gt[5] - dy * gt[2])
+            * self.inverse_determinant
+        )
+
+        row = int(
+            (dy * gt[1] - dx * gt[4])
+            * self.inverse_determinant
+        )
+
+        return column, row
+
+    def get_map_coordinates(self, column, row):
+
+        return (
+            self.geotransform[0]
+            + (column + 0.5) * self.geotransform[1]
+            + (row + 0.5) * self.geotransform[2],
+
+            self.geotransform[3]
+            + (column + 0.5) * self.geotransform[4]
+            + (row + 0.5) * self.geotransform[5]
+        )
+
+    def get_traversability(self, column, row):
+
+        # Check raster boundaries.
+        if (
+            column < 0 or column >= self.width
+            or row < 0 or row >= self.height
+        ):
+            return None
+
+        # Find the block containing this pixel.
+        block_x = column // self.block_width
+        block_y = row // self.block_height
+
+        block_key = (block_x, block_y)
+
+        # Read the block if it is not cached.
+        if block_key not in self.block_cache:
+
+            x_offset = block_x * self.block_width
+            y_offset = block_y * self.block_height
+
+            x_size = min(
+                self.block_width,
+                self.width - x_offset
+            )
+
+            y_size = min(
+                self.block_height,
+                self.height - y_offset
+            )
+
+            data = self.band.ReadAsArray(
+                x_offset,
+                y_offset,
+                x_size,
+                y_size
+            )
+
+            self.block_cache[block_key] = data
+
+            # Keep the cache within its configured size.
+            if len(self.block_cache) > self.cache_blocks:
+                self.block_cache.popitem(last=False)
+
+        else:
+            # Move recently used blocks to the end.
+            self.block_cache.move_to_end(block_key)
+
+        data = self.block_cache[block_key]
+
+        local_x = column % self.block_width
+        local_y = row % self.block_height
+
+        value = float(data[local_y, local_x])
+
+        # Reject invalid or impassable cells.
+        if not np.isfinite(value):
+            return None
+
+        if self.nodata is not None and value == self.nodata:
+            return None
+
+        if value < 0 or value >= 1:
+            return None
+
+        return value
+
+    def get_distance(self, first, second):
+
+        first_x, first_y = self.get_map_coordinates(
+            first[0], first[1]
+        )
+
+        second_x, second_y = self.get_map_coordinates(
+            second[0], second[1]
+        )
+
+        return math.hypot(
+            second_x - first_x,
+            second_y - first_y
+        )
+
+    def heuristic(self, current, goal):
+
+        return (
+                abs(current[0] - goal[0])
+                + abs(current[1] - goal[1])
+            )
+    
+    def find_path(self, start_x, start_y, goal_x, goal_y):
+
+        start = self.get_pixel(start_x, start_y)
+        goal = self.get_pixel(goal_x, goal_y)
+
+        start_cost = self.get_traversability(*start)
+        goal_cost = self.get_traversability(*goal)
+
+        if start_cost is None:
+            raise ValueError("Astronaut starting position is impassable")
+
+        if goal_cost is None:
+            raise ValueError("Destination waypoint is impassable")
+
+        # Eight possible movement directions.
+        directions = [
+            (0, -1),  # Up
+            (0, 1),   # Down
+            (-1, 0),  # Left
+            (1, 0)    # Right
+        ]
+
+        open_set = []
+
+        tie_breaker = count()
+
+        heapq.heappush(
+            open_set,
+            (self.heuristic(start, goal), next(tie_breaker), start)
+        )
+
+        came_from = {}
+
+        g_score = {start: 0.0}
+
+        visited = set()
+        self.expanded_nodes = 0
+        while open_set:
+
+            current = heapq.heappop(open_set)[2]
+
+            if current in visited:
+                continue
+
+            if current == goal:
+                return self.reconstruct_path(came_from, current)
+            self.expanded_nodes += 1
+
+            if self.expanded_nodes % 100000 == 0:
+                print(f"Expanded {self.expanded_nodes:,} nodes...", flush=True)
+            visited.add(current)
+
+            current_cost = self.get_traversability(*current)
+
+            for dx, dy in directions:
+
+                neighbor = (
+                    current[0] + dx,
+                    current[1] + dy
+                )
+
+                neighbor_cost = self.get_traversability(*neighbor)
+
+                if neighbor_cost is None:
+                    continue
+
+                distance = self.get_distance(current, neighbor)
+
+                # Penalize movement through difficult terrain.
+                # terrain_multiplier = 1 + self.alpha * (
+                #     (current_cost + neighbor_cost) / 2
+                # )
+
+                # movement_cost = distance * terrain_multiplier
+                movement_cost = distance
+
+                tentative_g = g_score[current] + movement_cost
+
+                if tentative_g < g_score.get(neighbor, float("inf")):
+
+                    came_from[neighbor] = current
+                    g_score[neighbor] = tentative_g
+
+                    f_score = (
+                        tentative_g
+                        + self.heuristic(neighbor, goal)
+                    )
+
+                    heapq.heappush(
+                        open_set,
+                        (f_score, next(tie_breaker), neighbor)
+                    )
+
+        return None
+
+    def reconstruct_path(self, came_from, current):
+
+        path = [current]
+
+        while current in came_from:
+
+            current = came_from[current]
+            path.append(current)
+
+        path.reverse()
+
+        # Convert raster pixels into map coordinates.
+        return [
+            self.get_map_coordinates(column, row)
+            for column, row in path
+        ]
