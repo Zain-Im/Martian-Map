@@ -46,6 +46,8 @@ class MartianMapWindow(QMainWindow):
         self.pending_waypoint = None
         self.astronaut_position = None
         self.placement_mode = None
+        self.route_selection_mode = False
+        self.route_destination = None
 
         self.setStyleSheet("""
             QMainWindow {
@@ -156,7 +158,9 @@ class MartianMapWindow(QMainWindow):
         self.waypoint_button.clicked.connect(
             self.start_waypoint_selection
         )
-
+        self.route_button.clicked.connect(
+            self.start_route_selection
+        )
         self.map_canvas.location_picked.connect(
             self.handle_map_location_picked
         )
@@ -178,27 +182,31 @@ class MartianMapWindow(QMainWindow):
 
         data_dir = os.path.join(
             project_dir,
-            "data",
-            "raw"
+            "data"
         )
 
         elevation_path = os.path.join(
             data_dir,
+            "raw",
             "elevation_map.tif"
         )
 
         optical_path = os.path.join(
             data_dir,
+            "raw",
             "optical_map.tif"
         )
 
         geology_path = os.path.join(
             data_dir,
+            "raw",
             "geology_map.gpkg"
         )
 
         traversability_path = os.path.join(
-            data_dir, "Traversability.tif"
+            data_dir, 
+            "processed",
+            "traversability_map.tif"
         )
 
         # Load the elevation raster.
@@ -249,7 +257,8 @@ class MartianMapWindow(QMainWindow):
             print("Traversability map could not be loaded.")
 
     def start_astronaut_selection(self):
-
+        
+        self.route_selection_mode = False
         self.placement_mode = "astronaut"
         self.map_canvas.start_waypoint_selection()
 
@@ -327,9 +336,34 @@ class MartianMapWindow(QMainWindow):
             self.elevation_label.setText("Elevation: Unavailable")
 
         self.status_label.setText("Astronaut location set")
+        self.route_button.setEnabled(True)
+    
+    def start_route_selection(self):
+
+        if self.astronaut_position is None:
+            self.status_label.setText(
+                "Set astronaut location first"
+            )
+            return
+
+        if len(self.waypoints) == 0:
+            self.status_label.setText(
+                "Save a waypoint first"
+            )
+            return
+
+        self.route_selection_mode = True
+        self.placement_mode = None
+
+        # Make sure the map is in waypoint-selection mode.
+        self.map_canvas.setMapTool(self.map_canvas.pan_tool)
+
+        self.status_label.setText(
+            "Select a destination waypoint"
+        )
 
     def start_waypoint_selection(self):
-
+        self.route_selection_mode = False
         self.placement_mode = "waypoint"
         self.map_canvas.start_waypoint_selection()
 
@@ -504,7 +538,16 @@ class MartianMapWindow(QMainWindow):
         self.status_label.setText(f"Saved {name}")
 
     def handle_saved_waypoint_selection(self, waypoint):
+        if self.route_selection_mode:
 
+            self.route_selection_mode = False
+            self.route_destination = waypoint
+
+            self.status_label.setText(
+                f"Destination selected: {waypoint['name']}"
+            )
+
+            return
         # Clear any pending waypoint.
         self.pending_waypoint = None
 

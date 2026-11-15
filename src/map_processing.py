@@ -25,7 +25,7 @@ class Traversability:
         project_dir = Path(__file__).resolve().parent.parent
 
         self.input_path = input_path or project_dir / "data" / "raw" / "elevation_map.tif"
-        self.output_path = output_path or project_dir / "data" / "raw" / "Traversability.tif"
+        self.output_path = output_path or project_dir / "data" / "processed" / "traversability_map.tif"
         
         self.slope_weight = slope_weight
         self.roughness_weight = roughness_weight
