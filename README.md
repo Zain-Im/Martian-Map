@@ -90,19 +90,13 @@ the application uses package-relative imports.
 
 ## Map Data
 
-Place original downloaded datasets in:
+Place `elevation_map.tif` and `optical_map.tif` in `data/raw/`.
+Startup reads the elevation TIFF directly and generates `Traversability.tif`
+in the same directory. No separate compression or decompression step is required.
 
-`data/raw/`
-
-The application expects `elevation_map.tif`, `optical_map.tif`, and
-`geology_map.gpkg` in that directory. Elevation is required for processing;
-missing optical or geology layers are reported and skipped. Startup writes
-`Traversability.tif` to the same directory. These paths are relative to the
-repository root, not `src/`.
-
-Place prepared datasets in:
-
-`data/processed/`
+All displayed layers are loaded from `data/raw/`. Place the optional
+`geology_map.gpkg` there as well; a missing geology layer is reported and
+skipped. These paths are relative to the repository root, not `src/`.
 
 Supported formats currently include:
 
