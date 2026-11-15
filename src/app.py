@@ -766,9 +766,9 @@ class MartianMapWindow(QMainWindow):
     def update_map_legend(self, map_type):
         # Adjust legend height depending on the map.
         if map_type == "Geology":
-            self.legend_scroll.setMinimumHeight(350)
+            self.legend_scroll.setMinimumHeight(260)
         else:
-            self.legend_scroll.setMinimumHeight(180)
+            self.legend_scroll.setMinimumHeight(120)
         # Remove all previous legend contents.
         while self.legend_content_layout.count():
 
@@ -938,7 +938,11 @@ class MartianMapWindow(QMainWindow):
         else:
 
             no_legend = QLabel("No legend available")
-            no_legend.setObjectName("secondaryText")
+            no_legend.setStyleSheet("""
+                color: #263238;
+                font-size: 13px;
+                font-weight: bold;
+            """)
             self.legend_content_layout.addWidget(no_legend)
 
     def show_elevation_map(self):

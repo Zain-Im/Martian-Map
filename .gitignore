@@ -56,3 +56,6 @@ data/raw/[tT]raversability.[tT][iI][fF][fF]
 
 # Temporary GIS data
 data/temporary/
+
+#Computed tif file
+Traversability.tif
