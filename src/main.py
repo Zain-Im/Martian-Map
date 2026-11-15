@@ -7,7 +7,7 @@ import sys
 
 from qgis.core import QgsApplication
 from app import MartianMapWindow
-from map_proccesing import Traversability
+from map_processing import Traversability
 
 
 def main():
