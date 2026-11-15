@@ -48,6 +48,10 @@ dist/
 *.aux.xml
 *.ovr
 
+# Keep raster datasets out of Git (including mixed-case extensions).
+*.[tT][iI][fF]
+*.[tT][iI][fF][fF]
+
 # Large original datasets
 data/raw/
 
