@@ -30,8 +30,8 @@ from qgis.core import (
     QgsPointXY
 )
 
-from .layer_manager import LayerManager
-from .map_canvas import MapCanvas
+from layer_manager import LayerManager
+from map_canvas import MapCanvas
 
 
 class MartianMapWindow(QMainWindow):
