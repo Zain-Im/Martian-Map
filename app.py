@@ -32,6 +32,8 @@ class MartianMapWindow(QMainWindow):
         self.resize(1440, 900)
         self.waypoints = []
         self.pending_waypoint = None
+        self.astronaut_position = None
+        self.placement_mode = None
 
         self.setStyleSheet("""
             QMainWindow {
@@ -140,17 +142,17 @@ class MartianMapWindow(QMainWindow):
         
         # Connect waypoint selection.
         self.waypoint_button.clicked.connect(
-            self.map_canvas.start_waypoint_selection
+            self.start_waypoint_selection
         )
 
         self.map_canvas.location_picked.connect(
-            self.handle_waypoint_location
+            self.handle_map_location_picked
         )
 
         self.map_canvas.waypoint_selected.connect(
             self.handle_saved_waypoint_selection
         )
-
+        self.selected_waypoint = None
         # Bottom status bar
         status_bar = self.create_status_bar()
         main_layout.addWidget(status_bar)
@@ -178,6 +180,11 @@ class MartianMapWindow(QMainWindow):
             "optical_map.tif"
         )
 
+        geology_path = os.path.join(
+            data_dir,
+            "geology_map.gpkg"
+        )
+
         # Load the elevation raster.
         elevation_layer = self.layer_manager.load_layer(
             elevation_path,
@@ -190,6 +197,11 @@ class MartianMapWindow(QMainWindow):
         optical_layer = self.layer_manager.load_layer(
             optical_path,
             "Optical"
+        )
+        # Load the geology map.
+        geology_layer = self.layer_manager.load_layer(
+            geology_path,
+            "Geology"
         )
 
         # Display elevation by default.
@@ -208,9 +220,93 @@ class MartianMapWindow(QMainWindow):
 
         if optical_layer is None:
             print("Optical map could not be loaded.")
-    
+
+        if geology_layer is None:
+            print("Geology map could not be loaded.")
+
+    def start_astronaut_selection(self):
+
+        self.placement_mode = "astronaut"
+        self.map_canvas.start_waypoint_selection()
+
+        self.status_label.setText(
+            "Select astronaut location on the map"
+        )
+
+
+    def handle_map_location_picked(self, point):
+
+        if self.placement_mode == "astronaut":
+
+            self.handle_astronaut_location(point)
+
+        elif self.placement_mode == "waypoint":
+
+            self.handle_waypoint_location(point)
+
+        self.placement_mode = None
+
+    def handle_astronaut_location(self, point):
+        # Get the selected coordinates.
+        x = point.x()
+        y = point.y()
+
+        # Retrieve the elevation layer.
+        elevation_layer = self.layer_manager.get_layer("Elevation")
+
+        elevation = None
+
+        if elevation_layer is not None:
+
+            # Convert the point to the elevation layer CRS.
+            canvas_crs = self.map_canvas.mapSettings().destinationCrs()
+
+            transform = QgsCoordinateTransform(
+                canvas_crs,
+                elevation_layer.crs(),
+                QgsProject.instance()
+            )
+
+            elevation_point = transform.transform(point)
+
+            # Sample the elevation raster.
+            provider = elevation_layer.dataProvider()
+
+            value, success = provider.sample(elevation_point, 1)
+
+            if success:
+                elevation = value
+
+        # Store the astronaut position separately from waypoints.
+        self.astronaut_position = {
+            "point": point,
+            "x": x,
+            "y": y,
+            "elevation": elevation
+        }
+
+        # Display the astronaut marker.
+        self.map_canvas.set_astronaut_marker(point)
+
+        # Update the sidebar.
+        self.astronaut_status.setText(
+            f"X: {x:.2f}\nY: {y:.2f}"
+        )
+
+        self.status_label.setText("Astronaut location set")
+
+    def start_waypoint_selection(self):
+
+        self.placement_mode = "waypoint"
+        self.map_canvas.start_waypoint_selection()
+
+        self.status_label.setText(
+            "Select waypoint location on the map"
+        )
 
     def handle_waypoint_location(self, point):
+        self.selected_waypoint = None
+        self.delete_waypoint_button.setEnabled(False)
 
         # Get the selected coordinates in the canvas CRS.
         x = point.x()
@@ -276,6 +372,29 @@ class MartianMapWindow(QMainWindow):
         # Update the status bar.
         self.status_label.setText("Waypoint preview")
 
+
+    def delete_waypoint(self):
+        if self.selected_waypoint is None:
+            return
+
+        waypoint = self.selected_waypoint
+
+        self.waypoints.remove(waypoint)
+        self.map_canvas.remove_waypoint_marker(waypoint)
+
+        self.selected_waypoint = None
+        self.delete_waypoint_button.setEnabled(False)
+
+        # Clear the waypoint information.
+        self.waypoint_name_input.clear()
+        self.waypoint_coordinates.setText("Not selected")
+        self.waypoint_elevation.setText("Unavailable")
+        self.waypoint_traversability.setText("Not evaluated")
+        self.waypoint_geology.setText("Not available")
+
+        self.info_panel.hide()
+        self.status_label.setText("Waypoint deleted")
+
     def save_waypoint(self):
 
         if self.pending_waypoint is None:
@@ -340,6 +459,8 @@ class MartianMapWindow(QMainWindow):
 
         # Disable saving because this waypoint already exists.
         self.save_waypoint_button.setEnabled(False)
+        self.selected_waypoint = waypoint
+        self.delete_waypoint_button.setEnabled(True)
 
         # Display the information panel.
         self.info_panel.show()
@@ -398,9 +519,25 @@ class MartianMapWindow(QMainWindow):
         # Basemap selection buttons.
         self.elevation_button = QPushButton("Elevation Map")
         self.optical_button = QPushButton("Optical Map")
+        self.geology_button = QPushButton("Geology Map")
+
+        self.elevation_button.setStyleSheet("""
+            font-size: 15px;
+            font-weight: bold;
+        """)
+
+        self.optical_button.setStyleSheet("""
+            font-size: 15px;
+            font-weight: bold;
+        """)
+        self.geology_button.setStyleSheet("""
+            font-size: 15px;
+            font-weight: bold;
+        """)
 
         layout.addWidget(self.elevation_button)
         layout.addWidget(self.optical_button)
+        layout.addWidget(self.geology_button)
 
         # Connect the buttons.
         self.elevation_button.clicked.connect(
@@ -410,6 +547,11 @@ class MartianMapWindow(QMainWindow):
         self.optical_button.clicked.connect(
             self.show_optical_map
         )
+
+        self.geology_button.clicked.connect(
+            self.show_geology_map
+        )
+
         layout.addSpacing(20)
 
         # Mission section
@@ -422,9 +564,48 @@ class MartianMapWindow(QMainWindow):
         self.waypoint_button = QPushButton("Add Waypoint")
         self.clear_route_button = QPushButton("Clear Route")
 
+        self.route_button.setStyleSheet("""
+            font-size: 15px;
+            font-weight: bold;
+        """)
+
+        self.waypoint_button.setStyleSheet("""
+            font-size: 15px;
+            font-weight: bold;
+        """)
+
+        self.clear_route_button.setStyleSheet("""
+            font-size: 15px;
+            font-weight: bold;
+        """)
+
         layout.addWidget(self.route_button)
         layout.addWidget(self.waypoint_button)
         layout.addWidget(self.clear_route_button)
+        layout.addSpacing(20)
+
+        # Mission position section
+        position_title = QLabel("MISSION POSITION")
+        position_title.setObjectName("sectionTitle")
+
+        layout.addWidget(position_title)
+
+        self.astronaut_button = QPushButton("Set / Update Location")
+        self.astronaut_button.setStyleSheet("""
+            font-size: 15px;
+            font-weight: bold;
+        """)
+
+        layout.addWidget(self.astronaut_button)
+
+        self.astronaut_status = QLabel("Location not set")
+        self.astronaut_status.setObjectName("secondaryText")
+
+        layout.addWidget(self.astronaut_status)
+
+        self.astronaut_button.clicked.connect(
+            self.start_astronaut_selection
+        )
 
         layout.addStretch()
 
@@ -489,6 +670,15 @@ class MartianMapWindow(QMainWindow):
             self.layer_manager.show_layers(["Optical"])
             self.status_label.setText("Optical map displayed")
 
+    def show_geology_map(self):
+
+        layer = self.layer_manager.get_layer("Geology")
+
+        if layer is not None:
+
+            self.layer_manager.show_layers(["Geology"])
+            self.status_label.setText("Geology map displayed")
+
     def create_info_panel(self):
 
         panel = QFrame()
@@ -498,16 +688,36 @@ class MartianMapWindow(QMainWindow):
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(18, 20, 18, 20)
         layout.setSpacing(12)
+        label_style = """
+            font-size: 15px;
+            font-weight: bold;
+            color: #E9A96B;
+        """
 
-        title = QLabel("WAYPOINT INFORMATION")
-        title.setObjectName("sectionTitle")
+        value_style = """
+            font-size: 16px;
+            font-weight: bold;
+            color: #E6EDF3;
+        """
+        title = QLabel("WAYPOINT INFO")
+        title.setStyleSheet("""
+            font-size: 18px;
+            font-weight: bold;
+            color: #E9A96B;
+        """)
 
         layout.addWidget(title)
 
         # Waypoint name
-        layout.addWidget(QLabel("Waypoint Name"))
+        name_title = QLabel("Waypoint Name")
+        name_title.setStyleSheet(label_style)
+        layout.addWidget(name_title)
 
         self.waypoint_name_input = QLineEdit()
+        self.waypoint_name_input.setStyleSheet("""
+            font-size: 16px;
+            font-weight: bold;
+        """)
         self.waypoint_name_input.setPlaceholderText(
             "Enter a name (optional)"
         )
@@ -517,37 +727,45 @@ class MartianMapWindow(QMainWindow):
         layout.addSpacing(10)
 
         # Coordinates
-        layout.addWidget(QLabel("Coordinates"))
+        coordinates_title = QLabel("Coordinates")
+        coordinates_title.setStyleSheet(label_style)
+        layout.addWidget(coordinates_title)
 
         self.waypoint_coordinates = QLabel("Not selected")
-        self.waypoint_coordinates.setObjectName("secondaryText")
+        self.waypoint_coordinates.setStyleSheet(value_style)
         layout.addWidget(self.waypoint_coordinates)
 
         layout.addSpacing(10)
 
         # Elevation
-        layout.addWidget(QLabel("Elevation"))
+        elevation_title = QLabel("Elevation")
+        elevation_title.setStyleSheet(label_style)
+        layout.addWidget(elevation_title)
 
         self.waypoint_elevation = QLabel("Unavailable")
-        self.waypoint_elevation.setObjectName("secondaryText")
+        self.waypoint_elevation.setStyleSheet(value_style)
         layout.addWidget(self.waypoint_elevation)
 
         layout.addSpacing(10)
 
         # Traversability
-        layout.addWidget(QLabel("Traversability"))
+        traversability_title = QLabel("Traversability")
+        traversability_title.setStyleSheet(label_style)
+        layout.addWidget(traversability_title)
 
         self.waypoint_traversability = QLabel("Not evaluated")
-        self.waypoint_traversability.setObjectName("secondaryText")
+        self.waypoint_traversability.setStyleSheet(value_style)
         layout.addWidget(self.waypoint_traversability)
 
         layout.addSpacing(10)
 
         # Geology
-        layout.addWidget(QLabel("Geology"))
+        geology_title = QLabel("Geology")
+        geology_title.setStyleSheet(label_style)
+        layout.addWidget(geology_title)
 
         self.waypoint_geology = QLabel("Not available")
-        self.waypoint_geology.setObjectName("secondaryText")
+        self.waypoint_geology.setStyleSheet(value_style)
         layout.addWidget(self.waypoint_geology)
 
         layout.addStretch()
@@ -561,6 +779,12 @@ class MartianMapWindow(QMainWindow):
         )
 
         layout.addWidget(self.save_waypoint_button)
+
+        self.delete_waypoint_button = QPushButton("Delete Waypoint")
+        self.delete_waypoint_button.setEnabled(False)
+        self.delete_waypoint_button.clicked.connect(self.delete_waypoint)
+
+        layout.addWidget(self.delete_waypoint_button)
 
         return panel
     
