@@ -5,10 +5,18 @@ MartianMap - GIS Layer Manager
 
 from pathlib import Path
 
+from qgis.PyQt.QtGui import QColor
+
 from qgis.core import (
     QgsProject,
     QgsRasterLayer,
-    QgsVectorLayer
+    QgsVectorLayer,
+    QgsCategorizedSymbolRenderer,
+    QgsRendererCategory,
+    QgsFillSymbol,
+    QgsSingleBandPseudoColorRenderer,
+    QgsRasterShader,
+    QgsColorRampShader
 )
 
 
@@ -62,11 +70,156 @@ class LayerManager:
 
         # Store a reference to the layer.
         self.layers[layer_name] = layer
+        # Apply elevation symbology.
+        if layer_name == "Elevation":
+            self.apply_elevation_symbology(layer)
+
+        # Apply geology symbology.
+        if layer_name == "Geology":
+            self.apply_geology_symbology(layer)
 
         if display:
             self.show_layers([layer_name])
 
         return layer
+    
+    def apply_elevation_symbology(self, layer):
+        """Apply the custom elevation colour gradient."""
+
+        # Elevation range from the original QGIS symbology.
+        minimum = -2651.6625977
+        maximum = -2391.2768555
+
+        # Extracted colour stops from the QGIS style.
+        colors = [
+            "#000000",
+            "#263B28",
+            "#355E36",
+            "#4E8242",
+            "#82A650",
+            "#C2C35B",
+            "#E5CB55",
+            "#DFA74A",
+            "#BB8140",
+            "#966039",
+            "#A54830",
+            "#BB3028",
+            "#D73D30"
+        ]
+
+        items = []
+
+        for i, color in enumerate(colors):
+
+            value = minimum + (maximum - minimum) * i / (len(colors) - 1)
+
+            item = QgsColorRampShader.ColorRampItem(
+                value,
+                QColor(color),
+                f"{value:.4f}"
+            )
+
+            items.append(item)
+
+        # Create the interpolated colour ramp.
+        ramp_shader = QgsColorRampShader()
+        ramp_shader.setColorRampType(
+            QgsColorRampShader.Interpolated
+        )
+        ramp_shader.setColorRampItemList(items)
+
+        # Create the raster shader.
+        raster_shader = QgsRasterShader()
+        raster_shader.setRasterShaderFunction(ramp_shader)
+
+        # Create the raster renderer.
+        renderer = QgsSingleBandPseudoColorRenderer(
+            layer.dataProvider(),
+            1,
+            raster_shader
+        )
+
+        renderer.setClassificationMin(minimum)
+        renderer.setClassificationMax(maximum)
+
+        layer.setRenderer(renderer)
+        layer.triggerRepaint()
+
+        print("Elevation symbology applied successfully.")
+    def apply_geology_symbology(self, layer):
+        """Apply categorized colours based on geological names."""
+
+        field_name = "name"
+
+        # Hardcoded geological colour palette.
+
+        colors = [
+            "#A94F42",  # Rust red
+            "#D18A36",  # Ochre
+            "#8D713C",  # Earth brown
+            "#C5A36B",  # Sand
+            "#A0A34D",  # Moss
+            "#547D45",  # Forest green
+            "#9566A6",  # Purple
+            "#667A91",  # Slate blue
+            "#91A64B",  # Olive
+            "#367F78",  # Teal
+            "#397AAB",  # Blue
+            "#625B9B",  # Indigo
+            "#B45D83",  # Rose
+            "#C16B58",  # Terracotta
+            "#8B806C",  # Taupe
+            "#795A70"   # Plum
+        ]
+
+
+        # Check that the field exists.
+        if layer.fields().indexFromName(field_name) == -1:
+            print("Name field not found in geology layer.")
+            return
+
+        # Collect unique geological names.
+        names = set()
+
+        for feature in layer.getFeatures():
+
+            name = feature[field_name]
+
+            if name is not None:
+                names.add(name)
+
+        # Sort names for consistent colour assignments.
+        names = sorted(names)
+
+        categories = []
+
+        # Assign a hardcoded colour to each name.
+        for i, name in enumerate(names):
+
+            color = colors[i % len(colors)]
+
+            symbol = QgsFillSymbol.createSimple({
+                "color": color,
+                "outline_color": "#5A4036",
+                "outline_width": "0.15"
+            })
+
+            category = QgsRendererCategory(
+                name,
+                symbol,
+                str(name)
+            )
+
+            categories.append(category)
+
+        # Apply categorized symbology.
+        renderer = QgsCategorizedSymbolRenderer(
+            field_name,
+            categories
+        )
+
+        layer.setRenderer(renderer)
+
 
     def remove_layer(self, layer_id):
         """Remove a layer from the project."""

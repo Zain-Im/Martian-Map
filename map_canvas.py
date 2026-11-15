@@ -110,7 +110,7 @@ class WaypointPanTool(QgsMapTool):
                     break
         if self.dragging:
             self.canvas.refresh()
-            
+
         # Reset the interaction state.
         self.start_position = None
         self.start_extent = None
@@ -136,6 +136,7 @@ class MapCanvas(QgsMapCanvas):
         self.preview_marker = None
         self.waypoint_markers = []
         self.selected_waypoint_marker = None
+        self.astronaut_marker = None
 
         # Create the map interaction tools.
         self.pan_tool = WaypointPanTool(self)
@@ -175,6 +176,16 @@ class MapCanvas(QgsMapCanvas):
         # Allow a new preview marker to be created.
         self.preview_marker = None
 
+    def remove_waypoint_marker(self, waypoint):
+        for marker, saved_waypoint in self.waypoint_markers:
+            if saved_waypoint == waypoint:
+                self.scene().removeItem(marker)
+                self.waypoint_markers.remove((marker, saved_waypoint))
+                break
+
+        self.selected_waypoint_marker = None
+        self.refresh()
+
     def select_waypoint(self, marker, waypoint):
 
         # Reset the previously selected marker.
@@ -202,6 +213,26 @@ class MapCanvas(QgsMapCanvas):
         # Send the selected waypoint information to app.py.
         self.waypoint_selected.emit(waypoint)
 
+    def set_astronaut_marker(self, point):
+
+        # Remove the previous astronaut marker.
+        if self.astronaut_marker is not None:
+            self.scene().removeItem(self.astronaut_marker)
+
+        # Create a new astronaut marker.
+        self.astronaut_marker = QgsVertexMarker(self)
+
+        self.astronaut_marker.setColor(QColor("#45D6E8"))
+        self.astronaut_marker.setFillColor(QColor("#45D6E8"))
+        self.astronaut_marker.setIconType(QgsVertexMarker.ICON_CIRCLE)
+        self.astronaut_marker.setIconSize(22)
+        self.astronaut_marker.setPenWidth(4)
+
+        self.astronaut_marker.setCenter(point)
+        self.astronaut_marker.show()
+
+        self.refresh()
+        
     def show_waypoint_preview(self, point):
 
         # Create the preview marker if it doesn't exist.
