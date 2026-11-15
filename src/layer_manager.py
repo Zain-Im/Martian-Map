@@ -3,6 +3,10 @@
 MartianMap - GIS Layer Manager
 """
 
+import logging
+logger = logging.getLogger("martian_map.layer_manager")
+
+
 from pathlib import Path
 
 from qgis.PyQt.QtGui import QColor
@@ -29,14 +33,16 @@ class LayerManager:
 
         # Store loaded layers by their names.
         self.layers = {}
+        logger.info("Layer manager initialized")
 
     def load_layer(self, file_path, name=None, display=False):
         """Load a raster or vector dataset."""
 
+        logger.info("Loading layer %s: %s", name, file_path)
         path = Path(file_path)
 
         if not path.exists():
-            print("File does not exist:", file_path)
+            logger.warning("Layer file missing: %s", file_path)
             return None
 
         layer_name = name or path.stem
@@ -62,7 +68,7 @@ class LayerManager:
 
         # Validate the dataset.
         if not layer.isValid():
-            print("Failed to load layer:", file_path)
+            logger.error("Layer invalid: %s | %s", file_path, layer.error().summary())
             return None
 
         # Add the layer to the QGIS project.
@@ -84,6 +90,7 @@ class LayerManager:
         if display:
             self.show_layers([layer_name])
 
+        logger.info("Layer ready: %s | CRS=%s", layer_name, layer.crs().description())
         return layer
     
     def apply_elevation_symbology(self, layer):
@@ -148,10 +155,11 @@ class LayerManager:
         layer.setRenderer(renderer)
         layer.triggerRepaint()
 
-        print("Elevation symbology applied successfully.")
+        logger.info("Elevation symbology applied")
 
     def apply_geology_symbology(self, layer):
         """Apply categorized colours based on geological names."""
+        logger.info("Building geology categories")
 
         field_name = "name"
 
@@ -179,7 +187,7 @@ class LayerManager:
 
         # Check that the field exists.
         if layer.fields().indexFromName(field_name) == -1:
-            print("Name field not found in geology layer.")
+            logger.warning("Geology styling skipped: name field missing")
             return
 
         # Collect unique geological names.
@@ -194,6 +202,7 @@ class LayerManager:
 
         # Sort names for consistent colour assignments.
         names = sorted(names)
+        logger.info("Geology categories found: %s", len(names))
 
         categories = []
 
@@ -290,6 +299,7 @@ class LayerManager:
 
     def show_layers(self, layer_names):
         """Display only the requested layers."""
+        logger.info("Displaying layers: %s", ", ".join(layer_names))
 
         visible_layers = []
 

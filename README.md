@@ -123,6 +123,22 @@ and merge changes through pull requests.
 
 ## Development Status
 
+Startup logs show elapsed seconds since boot, severity, component, and stage
+durations. They cover imports, terrain processing, QGIS initialization, UI
+construction, layer loading, predefined waypoints, first render, and shutdown.
+Missing layers are warnings; invalid layers and unhandled exceptions are errors
+with diagnostic details (unhandled exceptions include tracebacks).
+
+For additional diagnostics in PowerShell:
+
+```powershell
+$env:MARTIAN_MAP_LOG_LEVEL = "DEBUG"
+python src/main.py
+```
+
+Use `INFO` instead of `DEBUG` to restore normal verbosity. Native QGIS/GDAL/PROJ
+messages may still appear in their original format.
+
 Initial project structure created.
 
 Current implementation includes:

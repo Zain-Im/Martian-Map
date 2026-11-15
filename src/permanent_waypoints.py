@@ -1,5 +1,9 @@
 """Predefined Mars locations inserted into the normal waypoint collection."""
 
+import logging
+logger = logging.getLogger("martian_map.permanent_waypoints")
+
+
 from math import isfinite
 from osgeo import osr
 from qgis.core import (
@@ -34,8 +38,10 @@ class PermanentWaypoints:
 
     def insert(self, window):
         """Add missing predefined points after map layers are loaded."""
+        logger.info("Preparing %s predefined waypoints", len(self.LOCATIONS))
         elevation = window.layer_manager.get_layer("Elevation")
         if elevation is None:
+            logger.warning("Waypoint insertion skipped: elevation layer unavailable")
             return 0
         # Derive geographic coordinates from Mars, never Earth's EPSG:4326.
         spatial_ref = osr.SpatialReference()
@@ -44,6 +50,7 @@ class PermanentWaypoints:
         if not geographic.createFromWkt(spatial_ref.CloneGeogCS().ExportToWkt()):
             raise ValueError("Could not determine the Mars geographic CRS")
         canvas_crs = window.map_canvas.mapSettings().destinationCrs()
+        logger.debug("Waypoint CRS: %s -> %s", geographic.description(), canvas_crs.description())
         transform = QgsCoordinateTransform(geographic, canvas_crs, QgsProject.instance())
         existing = {p.get("permanent_id") for p in window.waypoints}
         added = 0
@@ -73,7 +80,11 @@ class PermanentWaypoints:
                         break
             window.map_canvas.add_waypoint_marker(waypoint)
             window.waypoints.append(waypoint)
+            logger.info("Waypoint ready: %s", name)
+            logger.debug("%s: lon=%.5f lat=%.5f x=%.2f y=%.2f elevation=%s", name,
+                         longitude, latitude, point.x(), point.y(), waypoint["elevation"])
             added += 1
+        logger.info("Predefined waypoints inserted: %s", added)
         return added
 
     @staticmethod

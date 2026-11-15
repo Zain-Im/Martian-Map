@@ -2,6 +2,10 @@
 MartianMap - Primary Application 
 """
 
+import logging
+logger = logging.getLogger("martian_map.app")
+
+
 from qgis.PyQt.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -41,6 +45,7 @@ class MartianMapWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
+        logger.info("Initializing main window and mission state")
 
         self.setWindowTitle("Martian Map")
         self.resize(1440, 900)
@@ -176,9 +181,12 @@ class MartianMapWindow(QMainWindow):
         main_layout.addWidget(status_bar)
 
         # Load the initial Mars elevation map.
+        logger.info("UI controls connected; loading initial maps")
         self.load_initial_map()
         self.permanent_waypoints = PermanentWaypoints()
-        self.permanent_waypoints.insert(self)
+        added = self.permanent_waypoints.insert(self)
+        logger.info("Window setup complete: %s layers, %s predefined waypoints",
+                    len(self.layer_manager.layers), added)
     
     def load_initial_map(self):
 
@@ -221,6 +229,7 @@ class MartianMapWindow(QMainWindow):
         if elevation_layer is not None:
             QgsProject.instance().setCrs(elevation_layer.crs())
             self.map_canvas.setDestinationCrs(elevation_layer.crs())
+            logger.info("Project and canvas CRS set: %s", elevation_layer.crs().description())
 
         # Load the optical raster.
         optical_layer = self.layer_manager.load_layer(
@@ -251,15 +260,17 @@ class MartianMapWindow(QMainWindow):
 
         else:
             self.status_label.setText("Failed to load elevation map")
+            logger.error("Initial elevation map unavailable")
 
         if optical_layer is None:
-            print("Optical map could not be loaded.")
+            logger.warning("Optical map unavailable during startup")
 
         if geology_layer is None:
-            print("Geology map could not be loaded.")
+            logger.warning("Geology map unavailable during startup")
 
         if traversability_layer is None:
-            print("Traversability map could not be loaded.")
+            logger.warning("Traversability map unavailable during startup")
+        logger.info("Initial layer loading finished")
 
     def start_astronaut_selection(self):
         
@@ -502,9 +513,11 @@ class MartianMapWindow(QMainWindow):
         waypoint = self.selected_waypoint
 
         if waypoint.get("permanent", False):
+            logger.debug("Deletion blocked for predefined waypoint: %s", waypoint.get("name"))
             return
 
         self.waypoints.remove(waypoint)
+        logger.info("Deleted waypoint: %s", waypoint.get("name"))
         self.map_canvas.remove_waypoint_marker(waypoint)
 
         self.selected_waypoint = None
@@ -539,6 +552,7 @@ class MartianMapWindow(QMainWindow):
         waypoint = self.pending_waypoint.copy()
         waypoint["name"] = name
         waypoint["description"] = self.waypoint_description_input.toPlainText()[:250]
+        logger.info("Saving user waypoint: %s", name)
 
         self.waypoints.append(waypoint)
         self.map_canvas.save_waypoint_marker(waypoint)
@@ -621,6 +635,7 @@ class MartianMapWindow(QMainWindow):
         )
         
     def create_top_bar(self):
+        logger.info("Building top toolbar")
 
         top_bar = QFrame()
         top_bar.setObjectName("topBar")
@@ -652,6 +667,7 @@ class MartianMapWindow(QMainWindow):
         return top_bar
 
     def create_sidebar(self):
+        logger.info("Building sidebar and route controls")
 
         sidebar = QFrame()
         sidebar.setObjectName("sidebar")
@@ -808,6 +824,7 @@ class MartianMapWindow(QMainWindow):
         return sidebar
 
     def create_map_panel(self):
+        logger.info("Building map canvas and navigation")
 
         map_panel = QFrame()
         map_panel.setObjectName("mapPanel")
@@ -1066,6 +1083,7 @@ class MartianMapWindow(QMainWindow):
         else:
             return "Untraversable"
     def create_info_panel(self):
+        logger.info("Building waypoint information and description editor")
 
         panel = QFrame()
         panel.setObjectName("sidebar")
@@ -1198,6 +1216,7 @@ class MartianMapWindow(QMainWindow):
         return panel
     
     def create_status_bar(self):
+        logger.info("Building status bar")
 
         status_bar = QFrame()
         status_bar.setObjectName("topBar")

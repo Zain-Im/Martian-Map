@@ -1,4 +1,8 @@
 
+import logging
+logger = logging.getLogger("martian_map.map_processing")
+
+
 from osgeo import gdal
 from pathlib import Path
 from time import perf_counter
@@ -41,7 +45,7 @@ class Traversability:
         if self._processing_started is None:
             self._processing_started = perf_counter()
         elapsed = perf_counter() - self._processing_started
-        print(f"[{elapsed:9.2f}s] {message}", flush=True)
+        logger.info("[processing +%.2fs] %s", elapsed, message)
 
     def validate_settings(self):
         settings = (
@@ -416,6 +420,9 @@ class Traversability:
         self.log("Processing started. Validating settings...")
         self.validate_settings()
 
+        logger.info("Terrain settings: slope_limit=%s roughness_limit=%s weights=(%s, %s) block_size=%s",
+                    self.slope_limit, self.roughness_limit, self.slope_weight,
+                    self.roughness_weight, self.block_size)
         self.log(f"Opening DEM: {self.input_path}")
         dem = gdal.Open(str(self.input_path))
 

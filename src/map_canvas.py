@@ -4,6 +4,10 @@
 MartianMap - Map display
 """
 
+import logging
+logger = logging.getLogger("martian_map.map_canvas")
+
+
 from qgis.PyQt.QtGui import QColor
 from qgis.PyQt.QtCore import pyqtSignal, Qt, QPoint
 from qgis.core import QgsProject, QgsRectangle
@@ -127,6 +131,7 @@ class MapCanvas(QgsMapCanvas):
     
     def __init__(self, parent=None):
         super().__init__(parent)
+        logger.info("Initializing map canvas, rendering cache, and selection tools")
 
         self.setCanvasColor(QColor("#252B32"))
         self.enableAntiAliasing(True)
@@ -149,6 +154,16 @@ class MapCanvas(QgsMapCanvas):
 
         # Enable panning by default.
         self.setMapTool(self.pan_tool)
+        self._initial_render_logged = False
+        self.mapCanvasRefreshed.connect(self._log_render_complete)
+        logger.info("Map canvas ready; pan and waypoint tools connected")
+
+    def _log_render_complete(self):
+        if not self._initial_render_logged:
+            logger.info("Initial map render completed")
+            self._initial_render_logged = True
+        else:
+            logger.debug("Map render completed")
 
     def start_waypoint_selection(self):
 
@@ -189,6 +204,7 @@ class MapCanvas(QgsMapCanvas):
         self.refresh()
 
     def select_waypoint(self, marker, waypoint):
+        logger.debug("Selecting waypoint: %s", waypoint.get("name"))
 
         # Reset the previously selected marker.
         if self.selected_waypoint_marker is not None:
