@@ -1,0 +1,1 @@
+"""MartianMap application package."""

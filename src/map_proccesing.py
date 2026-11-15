@@ -1,6 +1,7 @@
 
 from osgeo import gdal
 from pathlib import Path
+from time import perf_counter
 import numpy as np
 
 gdal.UseExceptions()
@@ -20,10 +21,10 @@ class Traversability:
         block_size=512,
         elevation_unit_metres=1.0
     ):
-        project_dir = Path(__file__).resolve().parent
+        project_dir = Path(__file__).resolve().parent.parent
 
         self.input_path = input_path or project_dir / "data" / "raw" / "elevation_map.tif"
-        self.output_path = output_path or project_dir / "data" / "raw" / "Traversability.tif"
+        self.output_path = output_path or project_dir /  "data" / "raw" / "Traversability.tif"
         
         self.slope_weight = slope_weight
         self.roughness_weight = roughness_weight
@@ -32,6 +33,14 @@ class Traversability:
         self.nodata = nodata
         self.block_size = block_size
         self.elevation_unit_metres = elevation_unit_metres
+        self._processing_started = None
+
+    def log(self, message):
+        """Print elapsed wall time, flushing immediately for terminal visibility."""
+        if self._processing_started is None:
+            self._processing_started = perf_counter()
+        elapsed = perf_counter() - self._processing_started
+        print(f"[{elapsed:9.2f}s] {message}", flush=True)
 
     def validate_settings(self):
         settings = (
@@ -57,6 +66,7 @@ class Traversability:
 
     def calculate_terrain(self, dem):
         """Generate slope and roughness rasters in memory."""
+        self.log("Validating DEM geometry and units...")
 
         srs = dem.GetSpatialRef()
 
@@ -76,6 +86,7 @@ class Traversability:
         if band.GetScale() not in (None, 1.0) or band.GetOffset() not in (None, 0.0):
             raise ValueError("Apply DEM band scale/offset before terrain processing")
 
+        self.log("Calculating slope...")
         slope = gdal.DEMProcessing(
             "",
             dem,
@@ -84,6 +95,7 @@ class Traversability:
             scale=srs.GetLinearUnits() / self.elevation_unit_metres
         )
 
+        self.log("Slope calculation finished. Calculating roughness...")
         roughness = gdal.DEMProcessing(
             "",
             dem,
@@ -94,6 +106,7 @@ class Traversability:
         if slope is None or roughness is None:
             raise RuntimeError("GDAL could not calculate terrain derivatives")
 
+        self.log("Terrain derivatives finished.")
         return slope, roughness
 
     @staticmethod
@@ -218,11 +231,12 @@ class Traversability:
             raise ValueError("Slope and roughness rasters must use the same grid and CRS")
 
         # Resolve automatic limits once over the entire map.
+        self.log("Scanning terrain for valid pixels and map-wide normalization limits...")
         slope_limit = self.slope_limit
         roughness_limit = self.roughness_limit
         has_valid = False
 
-        for _, _, slope_array, roughness_array, valid in self.terrain_blocks(
+        for x, y, slope_array, roughness_array, valid in self.terrain_blocks(
             slope, roughness
         ):
             if np.any(valid):
@@ -240,10 +254,17 @@ class Traversability:
                         float(np.max(roughness_array[valid]))
                     )
 
+            if x + slope_array.shape[1] == slope.RasterXSize:
+                rows = y + slope_array.shape[0]
+                self.log(f"Limit scan: {rows}/{slope.RasterYSize} rows "
+                         f"({100 * rows / slope.RasterYSize:.1f}%)")
+
         if not has_valid:
             raise ValueError("No valid terrain pixels to process")
 
+        self.log(f"Normalization limits: slope={slope_limit:g}, roughness={roughness_limit:g}")
         output_path = Path(output_path)
+        self.log(f"Creating output raster: {output_path}")
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         width = slope.RasterXSize
@@ -286,6 +307,7 @@ class Traversability:
         })
 
         try:
+            self.log("Calculating and writing terrain difficulty blocks...")
             for x, y, slope_array, roughness_array, valid in self.terrain_blocks(
                 slope, roughness
             ):
@@ -304,26 +326,35 @@ class Traversability:
                     )
 
                 output_band.WriteArray(cost, x, y)
+                if x + cost.shape[1] == width:
+                    rows = y + cost.shape[0]
+                    self.log(f"Output: {rows}/{height} rows ({100 * rows / height:.1f}%)")
 
+            self.log("Flushing output raster to disk...")
             output.FlushCache()
 
         finally:
             output_band = None
             output = None
 
+        self.log(f"Output raster saved: {output_path}")
         return output_path
 
     def generate(self):
         """Run the complete traversability generation process."""
 
+        self._processing_started = perf_counter()
+        self.log("Processing started. Validating settings...")
         self.validate_settings()
 
+        self.log(f"Opening DEM: {self.input_path}")
         dem = gdal.Open(str(self.input_path))
 
         if dem is None:
             raise RuntimeError(f"Could not open DEM: {self.input_path}")
 
         try:
+            self.log(f"DEM opened: {dem.RasterXSize} x {dem.RasterYSize} pixels")
             slope, roughness = self.calculate_terrain(dem)
 
             output_path = self.create_traversability(
@@ -332,6 +363,7 @@ class Traversability:
                 self.output_path
             )
 
+            self.log("Processing finished.")
             return output_path
 
         finally:
