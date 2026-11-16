@@ -39,6 +39,7 @@ from layer_manager import LayerManager
 from map_canvas import MapCanvas
 from permanent_waypoints import PermanentWaypoints
 from description_edit import DescriptionEdit
+from map_legend import MapLegend
 
 
 class MartianMapWindow(QMainWindow):
@@ -270,6 +271,7 @@ class MartianMapWindow(QMainWindow):
 
         if traversability_layer is None:
             logger.warning("Traversability map unavailable during startup")
+        self.update_map_legend("Elevation")
         logger.info("Initial layer loading finished")
 
     def start_astronaut_selection(self):
@@ -714,35 +716,10 @@ class MartianMapWindow(QMainWindow):
         layout.addWidget(self.geology_button)
         layout.addWidget(self.traversability_button)
         
-        # Map legend section
+        # Shared legend card keeps markers and overall height stable between layers.
         layout.addSpacing(10)
-
-        legend_title = QLabel("MAP LEGEND")
-        legend_title.setObjectName("sectionTitle")
-        layout.addWidget(legend_title)
-
-        # Scrollable area for legend contents.
-        self.legend_scroll = QScrollArea()
-        self.legend_scroll.setWidgetResizable(True)
-        self.legend_scroll.setFrameShape(QFrame.NoFrame)
-        self.legend_scroll.setMinimumHeight(260)
-
-        self.legend_content = QWidget()
-
-        self.legend_content.setStyleSheet("""
-            background-color: #F0F2F4;
-            border-radius: 5px;
-        """)
-
-        self.legend_content_layout = QVBoxLayout(self.legend_content)
-        self.legend_content_layout.setContentsMargins(0, 5, 0, 5)
-        self.legend_content_layout.setSpacing(8)
-
-        self.legend_scroll.setWidget(self.legend_content)
-
-        layout.addWidget(self.legend_scroll)
-
-        self.update_map_legend("Elevation")
+        self.map_legend = MapLegend()
+        layout.addWidget(self.map_legend)
 
         # Connect the buttons.
         self.elevation_button.clicked.connect(
@@ -852,186 +829,7 @@ class MartianMapWindow(QMainWindow):
         return map_panel
     
     def update_map_legend(self, map_type):
-        # Adjust legend height depending on the map.
-        if map_type == "Geology":
-            self.legend_scroll.setMinimumHeight(260)
-        else:
-            self.legend_scroll.setMinimumHeight(120)
-        # Remove all previous legend contents.
-        while self.legend_content_layout.count():
-
-            item = self.legend_content_layout.takeAt(0)
-
-            if item.widget():
-                item.widget().deleteLater()
-
-            elif item.layout():
-                while item.layout().count():
-
-                    child = item.layout().takeAt(0)
-
-                    if child.widget():
-                        child.widget().deleteLater()
-                        
-        # Elevation map legend.
-        if map_type == "Elevation":
-
-            # Maximum elevation.
-            maximum_label = QLabel("-2391 m")
-            maximum_label.setStyleSheet("""
-                color: #263238;
-                font-size: 13px;
-                font-weight: bold;
-            """)
-
-            self.legend_content_layout.addWidget(
-                maximum_label,
-                alignment=Qt.AlignRight
-            )
-
-            # Horizontal elevation gradient.
-            gradient = QFrame()
-            gradient.setFixedSize(210, 22)
-            gradient.setStyleSheet("""
-                background: qlineargradient(
-                    x1: 0, y1: 0, x2: 1, y2: 0,
-                    stop: 0 #000000,
-                    stop: 0.08 #263B28,
-                    stop: 0.17 #355E36,
-                    stop: 0.25 #4E8242,
-                    stop: 0.33 #82A650,
-                    stop: 0.42 #C2C35B,
-                    stop: 0.5 #E5CB55,
-                    stop: 0.58 #DFA74A,
-                    stop: 0.67 #BB8140,
-                    stop: 0.75 #966039,
-                    stop: 0.83 #A54830,
-                    stop: 0.92 #BB3028,
-                    stop: 1 #D73D30
-                );
-                border: 1px solid #59636E;
-                border-radius: 3px;
-            """)
-
-            self.legend_content_layout.addWidget(
-                gradient,
-                alignment=Qt.AlignHCenter
-            )
-
-            # Minimum elevation.
-            minimum_label = QLabel("-2652 m")
-            minimum_label.setStyleSheet("""
-                color: #263238;
-                font-size: 13px;
-                font-weight: bold;
-            """)
-            self.legend_content_layout.addWidget(
-                minimum_label,
-                alignment=Qt.AlignLeft
-            )
-
-        # Geology map legend.
-        elif map_type == "Geology":
-
-            layer = self.layer_manager.get_layer("Geology")
-
-            if layer is not None:
-
-                renderer = layer.renderer()
-
-                if isinstance(renderer, QgsCategorizedSymbolRenderer):
-
-                    categories = renderer.categories()
-
-                    for category in categories:
-
-                        # Create a row for each geological category.
-                        row = QHBoxLayout()
-                        row.setSpacing(8)
-
-                        # Colour swatch.
-                        color_box = QFrame()
-                        color_box.setFixedSize(18, 18)
-
-                        color = category.symbol().color().name()
-
-                        color_box.setStyleSheet(f"""
-                            background-color: {color};
-                            border: 1px solid #5A4036;
-                        """)
-
-                        # Geological unit name.
-                        name_label = QLabel(category.label())
-                        name_label.setStyleSheet("""
-                            color: #263238;
-                            font-size: 13px;
-                            font-weight: bold;
-                        """)                        
-                        name_label.setWordWrap(True)
-
-                        row.addWidget(color_box)
-                        row.addWidget(name_label, 1)
-
-                        self.legend_content_layout.addLayout(row)
-
-                # Traversability map legend.
-        elif map_type == "Traversability":
-
-            # Maximum traversability cost.
-            maximum_label = QLabel("1.0 - Untraversable")
-            maximum_label.setStyleSheet("""
-                color: #263238;
-                font-size: 13px;
-                font-weight: bold;
-            """)
-            self.legend_content_layout.addWidget(
-                maximum_label,
-                alignment=Qt.AlignRight
-            )
-
-            # Horizontal traversability gradient.
-            gradient = QFrame()
-            gradient.setFixedSize(210, 22)
-            gradient.setStyleSheet("""
-                background: qlineargradient(
-                    x1: 0, y1: 0, x2: 1, y2: 0,
-                    stop: 0 #559455,
-                    stop: 0.5 #F7E164,
-                    stop: 0.9 #EF9819,
-                    stop: 1 #A80407
-                );
-                border: 1px solid #59636E;
-                border-radius: 3px;
-            """)
-
-            self.legend_content_layout.addWidget(
-                gradient,
-                alignment=Qt.AlignHCenter
-            )
-
-            # Minimum traversability cost.
-            minimum_label = QLabel("0.0 - Traversable")
-            minimum_label.setStyleSheet("""
-                color: #263238;
-                font-size: 13px;
-                font-weight: bold;
-            """)
-
-            self.legend_content_layout.addWidget(
-                minimum_label,
-                alignment=Qt.AlignLeft
-            )
-
-        # Optical map has no legend.
-        else:
-
-            no_legend = QLabel("No legend available")
-            no_legend.setStyleSheet("""
-                color: #263238;
-                font-size: 13px;
-                font-weight: bold;
-            """)
-            self.legend_content_layout.addWidget(no_legend)
+        self.map_legend.update_layer(map_type, self.layer_manager.get_layer(map_type))
 
     def show_elevation_map(self):
 

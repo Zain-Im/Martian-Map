@@ -124,6 +124,9 @@ class WaypointPanTool(QgsMapTool):
         
 class MapCanvas(QgsMapCanvas):
 
+    WAYPOINT_COLOR = "#E9A96B"
+    ASTRONAUT_COLOR = "#45D6E8"
+
     # Signal emitted when the user selects a location.
     location_picked = pyqtSignal(object)
     # Signal emitted when the user selects a saved waypoint.
@@ -211,7 +214,7 @@ class MapCanvas(QgsMapCanvas):
 
             previous = next((p for m, p in self.waypoint_markers
                              if m is self.selected_waypoint_marker), {})
-            color = QColor(previous.get("color", "#E9A96B"))
+            color = QColor(previous.get("color", self.WAYPOINT_COLOR))
             self.selected_waypoint_marker.setColor(color)
             self.selected_waypoint_marker.setFillColor(color)
 
@@ -219,7 +222,7 @@ class MapCanvas(QgsMapCanvas):
             self.selected_waypoint_marker.setPenWidth(3)
 
         # Highlight the newly selected marker.
-        color = waypoint.get("color", "#E9A96B") if waypoint.get("permanent") else "#F4D35E"
+        color = waypoint.get("color", self.WAYPOINT_COLOR) if waypoint.get("permanent") else "#F4D35E"
         marker.setColor(QColor(color))
         marker.setFillColor(QColor(color))
         marker.setIconSize(20)
@@ -233,7 +236,7 @@ class MapCanvas(QgsMapCanvas):
     def add_waypoint_marker(self, waypoint):
         """Insert a saved waypoint without using the user's preview marker."""
         marker = QgsVertexMarker(self)
-        color = QColor(waypoint.get("color", "#E9A96B"))
+        color = QColor(waypoint.get("color", self.WAYPOINT_COLOR))
         marker.setColor(color)
         marker.setFillColor(color)
         marker.setIconType(QgsVertexMarker.ICON_CIRCLE)
@@ -253,8 +256,8 @@ class MapCanvas(QgsMapCanvas):
         # Create a new astronaut marker.
         self.astronaut_marker = QgsVertexMarker(self)
 
-        self.astronaut_marker.setColor(QColor("#45D6E8"))
-        self.astronaut_marker.setFillColor(QColor("#45D6E8"))
+        self.astronaut_marker.setColor(QColor(self.ASTRONAUT_COLOR))
+        self.astronaut_marker.setFillColor(QColor(self.ASTRONAUT_COLOR))
         self.astronaut_marker.setIconType(QgsVertexMarker.ICON_CIRCLE)
         self.astronaut_marker.setIconSize(22)
         self.astronaut_marker.setPenWidth(4)
@@ -271,8 +274,8 @@ class MapCanvas(QgsMapCanvas):
 
             self.preview_marker = QgsVertexMarker(self)
 
-            self.preview_marker.setColor(QColor("#E9A96B"))
-            self.preview_marker.setFillColor(QColor("#E9A96B"))
+            self.preview_marker.setColor(QColor(self.WAYPOINT_COLOR))
+            self.preview_marker.setFillColor(QColor(self.WAYPOINT_COLOR))
             self.preview_marker.setIconType(QgsVertexMarker.ICON_CIRCLE)
             self.preview_marker.setIconSize(14)
             self.preview_marker.setPenWidth(3)
