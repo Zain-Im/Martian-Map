@@ -1,6 +1,7 @@
 
 import heapq
 import math
+import logging
 from itertools import count
 from collections import OrderedDict
 from pathlib import Path
@@ -9,11 +10,12 @@ import numpy as np
 from osgeo import gdal
 
 gdal.UseExceptions()
+logger = logging.getLogger("martian_map.pathfinder")
 
 
 class Pathfinder:
 
-    def __init__(self, raster_path, alpha=0.1, heuristic_weight = 1.25, cache_blocks=64, max_escape_distance=100):
+    def __init__(self, raster_path, alpha=1, heuristic_weight = 1.25, cache_blocks=64, max_escape_distance=100):
 
         self.raster_path = Path(raster_path)
         self.alpha = alpha
@@ -44,9 +46,15 @@ class Pathfinder:
         self.block_width, self.block_height = self.band.GetBlockSize()
 
         self.block_cache = OrderedDict()
+        self.cache_hits = self.cache_misses = 0
 
         # Calculate the inverse geotransform.
         gt = self.geotransform
+        self.movement_distances = {
+            (dx, dy): math.hypot(dx * gt[1] + dy * gt[2], dx * gt[4] + dy * gt[5])
+            for dx, dy in ((0, -1), (0, 1), (-1, 0), (1, 0),
+                           (-1, -1), (1, -1), (-1, 1), (1, 1))
+        }
 
         determinant = gt[1] * gt[5] - gt[2] * gt[4]
 
@@ -56,7 +64,9 @@ class Pathfinder:
         self.inverse_determinant = 1.0 / determinant
 
     def close(self):
-
+        logger.info("Raster cache: %d hits, %d misses; limit %d blocks (%d x %d)",
+                    self.cache_hits, self.cache_misses, self.cache_blocks,
+                    self.block_width, self.block_height)
         self.band = None
         self.dataset = None
         self.block_cache.clear()
@@ -109,6 +119,7 @@ class Pathfinder:
 
         # Read the block if it is not cached.
         if block_key not in self.block_cache:
+            self.cache_misses += 1
 
             x_offset = block_x * self.block_width
             y_offset = block_y * self.block_height
@@ -130,34 +141,26 @@ class Pathfinder:
                 y_size
             )
 
-            self.block_cache[block_key] = data
+            valid = np.isfinite(data) & (data >= 0) & (data < 1)
+            if self.nodata is not None:
+                valid &= data != self.nodata
+            self.block_cache[block_key] = (data, valid)
 
             # Keep the cache within its configured size.
             if len(self.block_cache) > self.cache_blocks:
                 self.block_cache.popitem(last=False)
 
         else:
+            self.cache_hits += 1
             # Move recently used blocks to the end.
             self.block_cache.move_to_end(block_key)
 
-        data = self.block_cache[block_key]
+        data, valid = self.block_cache[block_key]
 
         local_x = column % self.block_width
         local_y = row % self.block_height
 
-        value = float(data[local_y, local_x])
-
-        # Reject invalid or impassable cells.
-        if not np.isfinite(value):
-            return None
-
-        if self.nodata is not None and value == self.nodata:
-            return None
-
-        if value < 0 or value >= 1:
-            return None
-
-        return value
+        return float(data[local_y, local_x]) if valid[local_y, local_x] else None
 
     def get_distance(self, first, second):
 
@@ -252,17 +255,6 @@ class Pathfinder:
 
             # Start A* from the first passable pixel.
             start = escape_path[-1]
-        # Eight possible movement directions.
-        directions = [
-            (0, -1),   # Up
-            (0, 1),    # Down
-            (-1, 0),   # Left
-            (1, 0),    # Right
-            (-1, -1),  # Top-left
-            (1, -1),   # Top-right
-            (-1, 1),   # Bottom-left
-            (1, 1)     # Bottom-right
-        ]
 
         open_set = []
 
@@ -312,35 +304,30 @@ class Pathfinder:
             visited.add(current)
 
             current_cost = self.get_traversability(*current)
+            neighbor_costs = {
+                (dx, dy): self.get_traversability(current[0] + dx, current[1] + dy)
+                for dx, dy in self.movement_distances
+            }
 
-            for dx, dy in directions:
+            for (dx, dy), distance in self.movement_distances.items():
 
                 neighbor = (
                     current[0] + dx,
                     current[1] + dy
                 )
 
-                neighbor_cost = self.get_traversability(*neighbor)
+                neighbor_cost = neighbor_costs[dx, dy]
 
                 if neighbor_cost is None:
                     continue
                 # Prevent diagonal movement through blocked corners.
                 if dx != 0 and dy != 0:
 
-                    horizontal = self.get_traversability(
-                        current[0] + dx,
-                        current[1]
-                    )
-
-                    vertical = self.get_traversability(
-                        current[0],
-                        current[1] + dy
-                    )
+                    horizontal = neighbor_costs[dx, 0]
+                    vertical = neighbor_costs[0, dy]
 
                     if horizontal is None or vertical is None:
                         continue
-
-                distance = self.get_distance(current, neighbor)
 
                 # Penalize movement through difficult terrain.
                 terrain_multiplier = 1 + self.alpha * (
