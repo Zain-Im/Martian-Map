@@ -41,6 +41,7 @@ from map_canvas import MapCanvas
 from pathfinder import Pathfinder
 from permanent_waypoints import PermanentWaypoints
 from description_edit import DescriptionEdit
+from status_label import StatusLabel
 from map_legend import MapLegend
 
 
@@ -273,10 +274,10 @@ class MartianMapWindow(QMainWindow):
                 elevation_layer.extent()
             )
 
-            self.status_label.setText("Elevation map loaded")
+            self.status_label.setText("Current layer: Elevation")
 
         else:
-            self.status_label.setText("Failed to load elevation map")
+            self.status_label.setText("Elevation map unavailable")
             logger.error("Initial elevation map unavailable")
 
         if optical_layer is None:
@@ -297,7 +298,7 @@ class MartianMapWindow(QMainWindow):
         self.map_canvas.start_waypoint_selection()
 
         self.status_label.setText(
-            "Select astronaut location on the map"
+            "Click to place astronaut"
         )
 
 
@@ -386,7 +387,7 @@ class MartianMapWindow(QMainWindow):
 
         if len(self.waypoints) == 0:
             self.status_label.setText(
-                "Save a waypoint first"
+                "Add a waypoint first"
             )
             return
 
@@ -411,18 +412,19 @@ class MartianMapWindow(QMainWindow):
     def plan_route(self, waypoint):
 
         if self.astronaut_position is None:
-            self.status_label.setText("Astronaut location not set")
+            self.status_label.setText("Set astronaut location first")
             return
         if waypoint.get("traversability") == "Untraversable":
             self.status_label.setText(
-                f"Cannot plan route: {waypoint['name']} is untraversable"
+                f"Blocked: {waypoint['name']}"
             )
             return
         if self.pathfinder is None:
-            self.status_label.setText("Pathfinder unavailable")
+            self.status_label.setText("Route planner unavailable")
             return
 
         self.status_label.setText("Calculating route...")
+        self.status_label.repaint()
 
         try:
 
@@ -454,23 +456,26 @@ class MartianMapWindow(QMainWindow):
             logger.info("Route to %s: %d points, %.2f m", waypoint['name'], len(path), distance)
 
             self.status_label.setText(
-                f"Route planned to {waypoint['name']} ({len(path):,} points)"
+                f"Route ready: {waypoint['name']}"
             )
 
         except ValueError as error:
 
             if str(error) == "No passable terrain found within escape distance":
                 self.status_label.setText(
-                    "Cannot plan route: No passable terrain nearby"
+                    "No passable terrain near astronaut"
                 )
 
+            elif str(error) == "Destination waypoint is impassable":
+                self.status_label.setText(f"Blocked: {waypoint['name']}")
             else:
-                self.status_label.setText(f"Route planning failed: {error}")
+                self.status_label.setText("Route planning failed")
+            logger.warning("Route planning failed: %s", error)
 
         except Exception as error:
 
             logger.exception("Route planning failed")
-            self.status_label.setText("An unexpected routing error occurred")
+            self.status_label.setText("Route planning failed")
 
     def start_waypoint_selection(self):
         self.route_selection_mode = False
@@ -478,7 +483,7 @@ class MartianMapWindow(QMainWindow):
         self.map_canvas.start_waypoint_selection()
 
         self.status_label.setText(
-            "Select waypoint location on the map"
+            "Click to place waypoint"
         )
 
     def handle_waypoint_location(self, point):
@@ -597,7 +602,7 @@ class MartianMapWindow(QMainWindow):
         self.info_panel.show()
 
         # Update the status bar.
-        self.status_label.setText("Waypoint preview")
+        self.status_label.setText("Waypoint placed — click Save")
 
 
     def delete_waypoint(self):
@@ -631,7 +636,7 @@ class MartianMapWindow(QMainWindow):
         self.waypoint_geology.setText("Not available")
 
         self.info_panel.hide()
-        self.status_label.setText("Waypoint deleted")
+        self.status_label.setText(f"Deleted: {waypoint['name']}")
 
     def save_waypoint(self):
 
@@ -664,7 +669,7 @@ class MartianMapWindow(QMainWindow):
         self.save_waypoint_button.setEnabled(False)
 
         # Update the status bar.
-        self.status_label.setText(f"Saved {name}")
+        self.status_label.setText(f"Saved: {name}")
 
     def update_waypoint_description(self, text):
         """Save user edits immediately, without modifying predefined descriptions."""
@@ -725,7 +730,7 @@ class MartianMapWindow(QMainWindow):
         self.info_panel.show()
 
         self.status_label.setText(
-            f"Selected {waypoint['name']}"
+            f"Selected: {waypoint['name']}"
         )
         
     def create_top_bar(self):
@@ -923,6 +928,26 @@ class MartianMapWindow(QMainWindow):
 
         layout.addWidget(self.map_canvas)
 
+        # Anchor feedback inside the map without intercepting map clicks.
+        overlay = QVBoxLayout(self.map_canvas.viewport())
+        overlay.setContentsMargins(0, 0, 0, 0)
+        overlay.addStretch()
+        self.status_label = StatusLabel("Ready", self.map_canvas.viewport())
+        self.status_label.setWordWrap(True)
+        self.status_label.setMaximumWidth(380)
+        self.status_label.setTextFormat(Qt.PlainText)
+        self.status_label.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.status_label.setStyleSheet("""
+            background-color: rgba(0, 0, 0, 170);
+            color: #E6EDF3;
+            border: 1px solid rgba(0, 0, 0, 170);
+            border-radius: 0px;
+            padding: 6px 10px;
+            font-size: 13px;
+            font-weight: bold;
+        """)
+        overlay.addWidget(self.status_label, 0, Qt.AlignLeft | Qt.AlignBottom)
+
         # Connect map navigation controls
         self.zoom_in_button.clicked.connect(self.map_canvas.zoomIn)
         self.zoom_out_button.clicked.connect(self.map_canvas.zoomOut)
@@ -943,7 +968,9 @@ class MartianMapWindow(QMainWindow):
 
             self.layer_manager.show_layers(["Elevation"])
             self.update_map_legend("Elevation")
-            self.status_label.setText("Elevation map displayed")
+            self.status_label.setText("Current layer: Elevation")
+        else:
+            self.status_label.setText("Elevation map unavailable")
 
 
     def show_optical_map(self):
@@ -954,7 +981,9 @@ class MartianMapWindow(QMainWindow):
 
             self.layer_manager.show_layers(["Optical"])
             self.update_map_legend("Optical")
-            self.status_label.setText("Optical map displayed")
+            self.status_label.setText("Current layer: Optical")
+        else:
+            self.status_label.setText("Optical map unavailable")
 
     def show_geology_map(self):
 
@@ -964,7 +993,9 @@ class MartianMapWindow(QMainWindow):
 
             self.layer_manager.show_layers(["Geology"])
             self.update_map_legend("Geology")
-            self.status_label.setText("Geology map displayed")
+            self.status_label.setText("Current layer: Geology")
+        else:
+            self.status_label.setText("Geology map unavailable")
 
     def show_traversability_map(self):
 
@@ -974,7 +1005,9 @@ class MartianMapWindow(QMainWindow):
                         
             self.layer_manager.show_layers(["Traversability"])
             self.update_map_legend("Traversability")
-            self.status_label.setText("Traversability map Displayed")
+            self.status_label.setText("Current layer: Traversability")
+        else:
+            self.status_label.setText("Traversability map unavailable")
 
     def classify_traversability(self, value):
 
@@ -1129,11 +1162,9 @@ class MartianMapWindow(QMainWindow):
 
         self.coordinates_label = QLabel("Astronaut Coordinates: --")
         self.elevation_label = QLabel("Elevation: --")
-        self.status_label = QLabel("Ready")
 
         self.coordinates_label.setObjectName("secondaryText")
         self.elevation_label.setObjectName("secondaryText")
-        self.status_label.setObjectName("secondaryText")
 
         layout.addWidget(self.coordinates_label)
         layout.addSpacing(25)
@@ -1141,6 +1172,5 @@ class MartianMapWindow(QMainWindow):
 
         layout.addStretch()
 
-        layout.addWidget(self.status_label)
 
         return status_bar
