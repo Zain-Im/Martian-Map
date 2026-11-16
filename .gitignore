@@ -58,4 +58,4 @@ data/raw/[tT]raversability.[tT][iI][fF][fF]
 data/temporary/
 
 #Computed tif file
-Traversability.tif
+traversability_map.tif

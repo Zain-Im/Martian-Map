@@ -17,9 +17,27 @@ def main():
     with stage(logger, 'Import application and processing dependencies'):
         from app import MartianMapWindow
         from map_processing import Traversability
-    with stage(logger, 'Generate traversability raster'):
-        saved_path = Traversability().generate()
-    logger.info('Traversability saved: %s', saved_path)
+    # Generate traversability raster only if it doesn't already exist.
+    project_dir = Path(__file__).resolve().parent.parent
+    traversability_path = (
+        project_dir / "data" / "processed" / "traversability_map.tif"
+    )
+
+    if traversability_path.exists():
+        logger.info(
+            'Traversability raster already exists: %s',
+            traversability_path
+        )
+
+    else:
+        traversability_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with stage(logger, 'Generate traversability raster'):
+            saved_path = Traversability(
+                output_path=traversability_path
+            ).generate()
+
+        logger.info('Traversability saved: %s', saved_path)
     qgs = None
     window = None
     try:

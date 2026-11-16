@@ -13,11 +13,11 @@ raster_path = (
 )
 
 # Replace these with actual coordinates from your application.
-start_x = 4591416.03
-start_y = 1090844.98
+start_x = 4591756.02
+start_y = 1091992.76
 
-goal_x = 4589912.84
-goal_y = 1092755.81
+goal_x = 4590968.77
+goal_y = 1093254.22
 
 
 pathfinder = Pathfinder(raster_path)
@@ -58,6 +58,14 @@ try:
         print(f"Number of points: {len(path)}")
         print(f"Starting point: {path[0]}")
         print(f"Ending point: {path[-1]}")
+        for i in range(0, 11):
+            column = round(start_pixel[0] + (goal_pixel[0] - start_pixel[0]) * i / 10)
+            row = round(start_pixel[1] + (goal_pixel[1] - start_pixel[1]) * i / 10)
+
+            print(
+                f"Position {i}:",
+                pathfinder.get_traversability(column, row)
+            )
 
 except Exception as error:
 
