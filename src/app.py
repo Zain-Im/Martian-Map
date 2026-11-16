@@ -366,7 +366,7 @@ class MartianMapWindow(QMainWindow):
 
         if elevation is not None:
             self.elevation_label.setText(
-                f"Elevation: {elevation:.2f} m"
+                f"Elevation: {elevation:,.2f} m"
             )
         else:
             self.elevation_label.setText("Elevation: Unavailable")
@@ -454,7 +454,7 @@ class MartianMapWindow(QMainWindow):
             logger.info("Route to %s: %d points, %.2f m", waypoint['name'], len(path), distance)
 
             self.status_label.setText(
-                f"Route planned to {waypoint['name']} ({len(path)} points)"
+                f"Route planned to {waypoint['name']} ({len(path):,} points)"
             )
 
         except ValueError as error:
@@ -575,7 +575,7 @@ class MartianMapWindow(QMainWindow):
 
         if elevation is not None:
             self.waypoint_elevation.setText(
-                f"{elevation:.2f}"
+                f"{elevation:,.2f}"
             )
         else:
             self.waypoint_elevation.setText("Unavailable")
@@ -702,7 +702,7 @@ class MartianMapWindow(QMainWindow):
 
         if elevation is not None:
             self.waypoint_elevation.setText(
-                f"{elevation:.2f}"
+                f"{elevation:,.2f}"
             )
         else:
             self.waypoint_elevation.setText("Unavailable")
