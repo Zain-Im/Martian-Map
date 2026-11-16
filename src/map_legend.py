@@ -1,6 +1,9 @@
 """Reusable dark-theme map legend, driven by the active layer renderer."""
 from qgis.PyQt.QtCore import Qt
-from qgis.PyQt.QtWidgets import QFrame, QLabel, QWidget, QVBoxLayout, QHBoxLayout, QScrollArea
+from qgis.PyQt.QtWidgets import (
+    QFrame, QLabel, QWidget, QVBoxLayout, QHBoxLayout,
+    QScrollArea, QSizePolicy
+)
 from qgis.core import QgsCategorizedSymbolRenderer
 from permanent_waypoints import PermanentWaypoints
 from map_canvas import MapCanvas
@@ -10,7 +13,11 @@ class MapLegend(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName('mapLegend')
-        self.setFixedHeight(330)
+        self.setMinimumHeight(240)
+        self.setSizePolicy(
+            QSizePolicy.Expanding,
+            QSizePolicy.Expanding
+        )
         self.setStyleSheet('''
             QFrame#mapLegend { background: #172330; border: 1px solid #34465A; border-radius: 8px; }
             QFrame#mapLegend QWidget { background: transparent; }

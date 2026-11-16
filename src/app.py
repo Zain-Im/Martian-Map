@@ -304,6 +304,8 @@ class MartianMapWindow(QMainWindow):
         self.placement_mode = None
 
     def handle_astronaut_location(self, point):
+        self.map_canvas.clear_route()
+        self.route_destination = None
         # Get the selected coordinates.
         x = point.x()
         y = point.y()
@@ -574,6 +576,10 @@ class MartianMapWindow(QMainWindow):
         if waypoint.get("permanent", False):
             logger.debug("Deletion blocked for predefined waypoint: %s", waypoint.get("name"))
             return
+        # Clear the route only if the deleted waypoint is its destination.
+        if waypoint is self.route_destination:
+            self.map_canvas.clear_route()
+            self.route_destination = None
 
         self.waypoints.remove(waypoint)
         logger.info("Deleted waypoint: %s", waypoint.get("name"))
@@ -773,7 +779,7 @@ class MartianMapWindow(QMainWindow):
         # Shared legend card keeps markers and overall height stable between layers.
         layout.addSpacing(10)
         self.map_legend = MapLegend()
-        layout.addWidget(self.map_legend)
+        layout.addWidget(self.map_legend, 1)
 
         # Connect the buttons.
         self.elevation_button.clicked.connect(
@@ -1077,7 +1083,7 @@ class MartianMapWindow(QMainWindow):
         layout = QHBoxLayout(status_bar)
         layout.setContentsMargins(15, 2, 15, 2)
 
-        self.coordinates_label = QLabel("Coordinates: --")
+        self.coordinates_label = QLabel("Astronaut Coordinates: --")
         self.elevation_label = QLabel("Elevation: --")
         self.status_label = QLabel("Ready")
 
