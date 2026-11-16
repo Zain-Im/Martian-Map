@@ -1,5 +1,6 @@
 """Reusable dark-theme map legend, driven by the active layer renderer."""
-from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtCore import Qt, QPoint
+from qgis.PyQt.QtGui import QColor, QPainter, QPen, QPixmap, QPolygon
 from qgis.PyQt.QtWidgets import (
     QFrame, QLabel, QWidget, QVBoxLayout, QHBoxLayout,
     QScrollArea, QSizePolicy
@@ -50,10 +51,11 @@ class MapLegend(QFrame):
         for title, color in [('Landmarks', PermanentWaypoints.COLOR),
                              ('Your waypoints', MapCanvas.WAYPOINT_COLOR),
                              ('Astronaut', MapCanvas.ASTRONAUT_COLOR)]:
-            layout.addWidget(self.swatch_row(title, color, circle=True))
+            layout.addWidget(self.swatch_row(title, color, circle=title == 'Astronaut',
+                                            diamond=title != 'Astronaut'))
 
     @staticmethod
-    def swatch_row(text, color, circle=False):
+    def swatch_row(text, color, circle=False, diamond=False):
         widget = QWidget()
         row = QHBoxLayout(widget)
         row.setContentsMargins(0, 3, 0, 3)
@@ -61,6 +63,21 @@ class MapLegend(QFrame):
         swatch = QFrame()
         swatch.setFixedSize(14, 14)
         swatch.setStyleSheet(f'background-color: {color}; border: 1px solid #9BAFC2; border-radius: {7 if circle else 3}px;')
+        if circle or diamond:
+            pixmap = QPixmap(20, 20)
+            pixmap.fill(Qt.transparent)
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.Antialiasing)
+            painter.setPen(QPen(QColor(MapCanvas.MARKER_OUTLINE), 2))
+            painter.setBrush(QColor(color))
+            if diamond:
+                painter.drawPolygon(QPolygon([QPoint(10, 2), QPoint(18, 10),
+                                               QPoint(10, 18), QPoint(2, 10)]))
+            else:
+                painter.drawEllipse(3, 3, 14, 14)
+            painter.end()
+            swatch = QLabel()
+            swatch.setPixmap(pixmap)
         label = QLabel(text)
         label.setWordWrap(True)
         label.setMinimumWidth(0)
