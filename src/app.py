@@ -37,6 +37,7 @@ from qgis.core import (
 
 from layer_manager import LayerManager
 from map_canvas import MapCanvas
+from pathfinder import Pathfinder
 from permanent_waypoints import PermanentWaypoints
 from description_edit import DescriptionEdit
 from map_legend import MapLegend
@@ -56,6 +57,7 @@ class MartianMapWindow(QMainWindow):
         self.placement_mode = None
         self.route_selection_mode = False
         self.route_destination = None
+        self.pathfinder = None
 
         self.setStyleSheet("""
             QMainWindow {
@@ -248,6 +250,10 @@ class MartianMapWindow(QMainWindow):
             "Traversability"
         )
 
+        if traversability_layer is not None:
+
+            self.pathfinder = Pathfinder(traversability_path)
+
         # Display elevation by default.
         if elevation_layer is not None:
 
@@ -379,6 +385,57 @@ class MartianMapWindow(QMainWindow):
         self.status_label.setText(
             "Select a destination waypoint"
         )
+    def plan_route(self, waypoint):
+
+        if self.astronaut_position is None:
+            self.status_label.setText("Astronaut location not set")
+            return
+        if waypoint.get("traversability") == "Untraversable":
+            self.status_label.setText(
+                f"Cannot plan route: {waypoint['name']} is untraversable"
+            )
+            return
+        if self.pathfinder is None:
+            self.status_label.setText("Pathfinder unavailable")
+            return
+
+        self.status_label.setText("Calculating route...")
+
+        try:
+
+            path = self.pathfinder.find_path(
+                self.astronaut_position["x"],
+                self.astronaut_position["y"],
+                waypoint["x"],
+                waypoint["y"]
+            )
+
+            if path is None:
+                self.status_label.setText("No route found")
+                return
+
+            self.map_canvas.draw_route(path)
+
+            self.route_destination = waypoint
+
+            self.status_label.setText(
+                f"Route planned to {waypoint['name']} ({len(path)} points)"
+            )
+
+        except ValueError as error:
+
+            if str(error) == "No passable terrain found within escape distance":
+                self.status_label.setText(
+                    "Cannot plan route: No passable terrain nearby"
+                )
+
+            else:
+                self.status_label.setText(f"Route planning failed: {error}")
+
+        except Exception as error:
+
+            logger.exception("Route planning failed")
+            self.status_label.setText("An unexpected routing error occurred")
 
     def start_waypoint_selection(self):
         self.route_selection_mode = False
@@ -581,11 +638,8 @@ class MartianMapWindow(QMainWindow):
         if self.route_selection_mode:
 
             self.route_selection_mode = False
-            self.route_destination = waypoint
 
-            self.status_label.setText(
-                f"Destination selected: {waypoint['name']}"
-            )
+            self.plan_route(waypoint)
 
             return
         # Clear any pending waypoint.

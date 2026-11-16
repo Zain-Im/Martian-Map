@@ -10,12 +10,13 @@ logger = logging.getLogger("martian_map.map_canvas")
 
 from qgis.PyQt.QtGui import QColor
 from qgis.PyQt.QtCore import pyqtSignal, Qt, QPoint
-from qgis.core import QgsProject, QgsRectangle
+from qgis.core import QgsProject, QgsRectangle, QgsWkbTypes, QgsPointXY
 from qgis.gui import (
     QgsMapCanvas,
     QgsMapTool,
     QgsMapToolEmitPoint,
-    QgsVertexMarker
+    QgsVertexMarker,
+    QgsRubberBand
 )
 
 class WaypointPanTool(QgsMapTool):
@@ -145,6 +146,7 @@ class MapCanvas(QgsMapCanvas):
         self.waypoint_markers = []
         self.selected_waypoint_marker = None
         self.astronaut_marker = None
+        self.route_band = None
 
         # Create the map interaction tools.
         self.pan_tool = WaypointPanTool(self)
@@ -283,3 +285,37 @@ class MapCanvas(QgsMapCanvas):
         # Move the preview marker to the selected location.
         self.preview_marker.setCenter(point)
         self.preview_marker.show()
+
+    def draw_route(self, path):
+
+        # Remove the previous route.
+        self.clear_route()
+
+        # Create a new route line.
+        self.route_band = QgsRubberBand(
+            self,
+            QgsWkbTypes.LineGeometry
+        )
+
+        self.route_band.setColor(QColor("#174A78"))
+        self.route_band.setWidth(3)
+        self.route_band.setLineStyle(Qt.SolidLine)
+
+        # Draw the path.
+        for x, y in path:
+            self.route_band.addPoint(
+                QgsPointXY(x, y),
+                False
+            )
+
+        self.route_band.show()
+        self.refresh()
+
+
+    def clear_route(self):
+
+        if self.route_band is not None:
+            self.route_band.reset(QgsWkbTypes.LineGeometry)
+            self.route_band = None
+
+        self.refresh()

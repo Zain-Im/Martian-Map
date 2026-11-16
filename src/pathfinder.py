@@ -13,11 +13,14 @@ gdal.UseExceptions()
 
 class Pathfinder:
 
-    def __init__(self, raster_path, alpha=4.0, cache_blocks=64):
+    def __init__(self, raster_path, alpha=0.1, heuristic_weight = 1.25, cache_blocks=64, max_escape_distance=100):
 
         self.raster_path = Path(raster_path)
         self.alpha = alpha
+        self.heuristic_weight = heuristic_weight
+
         self.cache_blocks = cache_blocks
+        self.max_escape_distance = max_escape_distance
 
         self.dataset = gdal.Open(
             str(self.raster_path),
@@ -170,7 +173,49 @@ class Pathfinder:
             second_x - first_x,
             second_y - first_y
         )
+    def find_escape_path(self, start, goal):
 
+        x, y = start
+        goal_x, goal_y = goal
+
+        dx = abs(goal_x - x)
+        dy = abs(goal_y - y)
+
+        sx = 1 if x < goal_x else -1
+        sy = 1 if y < goal_y else -1
+
+        error = dx - dy
+
+        escape_path = [start]
+        steps = 0
+
+        # Check whether the astronaut is already on passable terrain.
+        if self.get_traversability(x, y) is not None:
+            return escape_path
+
+        while steps < self.max_escape_distance:
+
+            if x == goal_x and y == goal_y:
+                break
+
+            error_twice = 2 * error
+
+            if error_twice > -dy:
+                error -= dy
+                x += sx
+
+            if error_twice < dx:
+                error += dx
+                y += sy
+
+            escape_path.append((x, y))
+            steps += 1
+
+            # Stop when passable terrain is reached.
+            if self.get_traversability(x, y) is not None:
+                return escape_path
+
+        return None
     def heuristic(self, current, goal):
 
         return (
@@ -186,12 +231,23 @@ class Pathfinder:
         start_cost = self.get_traversability(*start)
         goal_cost = self.get_traversability(*goal)
 
-        if start_cost is None:
-            raise ValueError("Astronaut starting position is impassable")
-
         if goal_cost is None:
             raise ValueError("Destination waypoint is impassable")
 
+        # Find an escape path if the astronaut starts in impassable terrain.
+        escape_path = [start]
+
+        if start_cost is None:
+
+            escape_path = self.find_escape_path(start, goal)
+
+            if escape_path is None:
+                raise ValueError(
+                    "No passable terrain found within escape distance"
+                )
+
+            # Start A* from the first passable pixel.
+            start = escape_path[-1]
         # Eight possible movement directions.
         directions = [
             (0, -1),  # Up
@@ -206,7 +262,7 @@ class Pathfinder:
 
         heapq.heappush(
             open_set,
-            (self.heuristic(start, goal), next(tie_breaker), start)
+            (self.heuristic(start, goal), 0.0, next(tie_breaker), start)
         )
 
         came_from = {}
@@ -217,13 +273,30 @@ class Pathfinder:
         self.expanded_nodes = 0
         while open_set:
 
-            current = heapq.heappop(open_set)[2]
+            current_f, negative_g, _, current = heapq.heappop(open_set)
+            current_g = -negative_g
+
+            if current_g > g_score.get(current, float("inf")):
+                continue
 
             if current in visited:
                 continue
 
             if current == goal:
-                return self.reconstruct_path(came_from, current)
+
+                path = self.reconstruct_path(came_from, current)
+
+                # Add the escape path to the beginning of the A* path.
+                if len(escape_path) > 1:
+
+                    escape_coordinates = [
+                        self.get_map_coordinates(column, row)
+                        for column, row in escape_path[:-1]
+                    ]
+
+                    path = escape_coordinates + path
+
+                return path
             self.expanded_nodes += 1
 
             if self.expanded_nodes % 100000 == 0:
@@ -247,12 +320,11 @@ class Pathfinder:
                 distance = self.get_distance(current, neighbor)
 
                 # Penalize movement through difficult terrain.
-                # terrain_multiplier = 1 + self.alpha * (
-                #     (current_cost + neighbor_cost) / 2
-                # )
+                terrain_multiplier = 1 + self.alpha * (
+                    (current_cost + neighbor_cost) / 2
+                )
 
-                # movement_cost = distance * terrain_multiplier
-                movement_cost = distance
+                movement_cost = distance * terrain_multiplier
 
                 tentative_g = g_score[current] + movement_cost
 
@@ -263,12 +335,12 @@ class Pathfinder:
 
                     f_score = (
                         tentative_g
-                        + self.heuristic(neighbor, goal)
+                        + self.heuristic_weight * self.heuristic(neighbor, goal)
                     )
 
                     heapq.heappush(
                         open_set,
-                        (f_score, next(tie_breaker), neighbor)
+                        (f_score, -tentative_g, next(tie_breaker), neighbor)
                     )
 
         return None
