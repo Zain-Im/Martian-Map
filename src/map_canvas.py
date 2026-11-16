@@ -312,6 +312,25 @@ class MapCanvas(QgsMapCanvas):
         self.refresh()
 
 
+    def zoom_to_route(self, path):
+        """Fit all route points with padding, including degenerate routes."""
+        if not path:
+            return
+        min_x = max_x = path[0][0]
+        min_y = max_y = path[0][1]
+        for x, y in path:
+            min_x, max_x = min(min_x, x), max(max_x, x)
+            min_y, max_y = min(min_y, y), max(max_y, y)
+        # The map uses metres; keep at least a 20 m view on either axis.
+        padding = max(max_x - min_x, max_y - min_y) * 0.15
+        pad_x = max(padding, (20 - (max_x - min_x)) / 2)
+        pad_y = max(padding, (20 - (max_y - min_y)) / 2)
+        self.setExtent(QgsRectangle(
+            min_x - pad_x, min_y - pad_y,
+            max_x + pad_x, max_y + pad_y,
+        ))
+        self.refresh()
+
     def clear_route(self):
 
         if self.route_band is not None:

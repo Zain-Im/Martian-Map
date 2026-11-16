@@ -3,6 +3,7 @@ MartianMap - Primary Application
 """
 
 import logging
+from math import hypot
 logger = logging.getLogger("martian_map.app")
 
 
@@ -41,6 +42,14 @@ from pathfinder import Pathfinder
 from permanent_waypoints import PermanentWaypoints
 from description_edit import DescriptionEdit
 from map_legend import MapLegend
+
+
+def calculate_route_distance(path):
+    """Return horizontal route length in the projected map's metre units."""
+    return sum(
+        hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1])
+        for i in range(1, len(path))
+    )
 
 
 class MartianMapWindow(QMainWindow):
@@ -171,6 +180,7 @@ class MartianMapWindow(QMainWindow):
         self.route_button.clicked.connect(
             self.start_route_selection
         )
+        self.clear_route_button.clicked.connect(self.clear_planned_route)
         self.map_canvas.location_picked.connect(
             self.handle_map_location_picked
         )
@@ -304,8 +314,8 @@ class MartianMapWindow(QMainWindow):
         self.placement_mode = None
 
     def handle_astronaut_location(self, point):
-        self.map_canvas.clear_route()
-        self.route_destination = None
+        destination = self.route_destination
+        self.clear_planned_route()
         # Get the selected coordinates.
         x = point.x()
         y = point.y()
@@ -363,6 +373,8 @@ class MartianMapWindow(QMainWindow):
 
         self.status_label.setText("Astronaut location set")
         self.route_button.setEnabled(True)
+        if destination is not None:
+            self.plan_route(destination)
     
     def start_route_selection(self):
 
@@ -387,6 +399,15 @@ class MartianMapWindow(QMainWindow):
         self.status_label.setText(
             "Select a destination waypoint"
         )
+    def clear_planned_route(self):
+        self.map_canvas.clear_route()
+        self.route_destination = None
+        self.route_selection_mode = False
+        self.route_summary_label.clear()
+        self.route_summary_label.hide()
+        self.clear_route_button.setEnabled(False)
+        self.status_label.setText("Route cleared")
+
     def plan_route(self, waypoint):
 
         if self.astronaut_position is None:
@@ -412,13 +433,25 @@ class MartianMapWindow(QMainWindow):
                 waypoint["y"]
             )
 
-            if path is None:
+            if not path:
                 self.status_label.setText("No route found")
                 return
 
+            distance = calculate_route_distance(path)
             self.map_canvas.draw_route(path)
+            self.map_canvas.zoom_to_route(path)
 
             self.route_destination = waypoint
+            distance_text = (
+                f"{distance:,.0f} m" if distance < 1000
+                else f"{distance / 1000:,.2f} km"
+            )
+            self.route_summary_label.setText(
+                f"Route to {waypoint['name']}\nDistance: {distance_text}"
+            )
+            self.route_summary_label.show()
+            self.clear_route_button.setEnabled(True)
+            logger.info("Route to %s: %d points, %.2f m", waypoint['name'], len(path), distance)
 
             self.status_label.setText(
                 f"Route planned to {waypoint['name']} ({len(path)} points)"
@@ -578,8 +611,7 @@ class MartianMapWindow(QMainWindow):
             return
         # Clear the route only if the deleted waypoint is its destination.
         if waypoint is self.route_destination:
-            self.map_canvas.clear_route()
-            self.route_destination = None
+            self.clear_planned_route()
 
         self.waypoints.remove(waypoint)
         logger.info("Deleted waypoint: %s", waypoint.get("name"))
@@ -828,6 +860,18 @@ class MartianMapWindow(QMainWindow):
         layout.addWidget(self.route_button)
         layout.addWidget(self.waypoint_button)
         layout.addWidget(self.clear_route_button)
+        self.route_summary_label = QLabel()
+        self.route_summary_label.setTextFormat(Qt.PlainText)
+        self.route_summary_label.setWordWrap(True)
+        self.route_summary_label.setStyleSheet("""
+            background-color: #172536;
+            border: 1px solid #34465A;
+            border-radius: 5px;
+            padding: 10px;
+            font-weight: bold;
+        """)
+        self.route_summary_label.hide()
+        layout.addWidget(self.route_summary_label)
         layout.addSpacing(20)
 
         # Mission position section
