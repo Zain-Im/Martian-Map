@@ -216,12 +216,16 @@ class Pathfinder:
                 return escape_path
 
         return None
+    
     def heuristic(self, current, goal):
 
-        return (
-                abs(current[0] - goal[0])
-                + abs(current[1] - goal[1])
-            )
+        dx = abs(current[0] - goal[0])
+        dy = abs(current[1] - goal[1])
+
+        diagonal = min(dx, dy)
+        straight = max(dx, dy) - diagonal
+
+        return diagonal * math.sqrt(2) + straight
     
     def find_path(self, start_x, start_y, goal_x, goal_y):
 
@@ -250,10 +254,14 @@ class Pathfinder:
             start = escape_path[-1]
         # Eight possible movement directions.
         directions = [
-            (0, -1),  # Up
-            (0, 1),   # Down
-            (-1, 0),  # Left
-            (1, 0)    # Right
+            (0, -1),   # Up
+            (0, 1),    # Down
+            (-1, 0),   # Left
+            (1, 0),    # Right
+            (-1, -1),  # Top-left
+            (1, -1),   # Top-right
+            (-1, 1),   # Bottom-left
+            (1, 1)     # Bottom-right
         ]
 
         open_set = []
@@ -316,6 +324,21 @@ class Pathfinder:
 
                 if neighbor_cost is None:
                     continue
+                # Prevent diagonal movement through blocked corners.
+                if dx != 0 and dy != 0:
+
+                    horizontal = self.get_traversability(
+                        current[0] + dx,
+                        current[1]
+                    )
+
+                    vertical = self.get_traversability(
+                        current[0],
+                        current[1] + dy
+                    )
+
+                    if horizontal is None or vertical is None:
+                        continue
 
                 distance = self.get_distance(current, neighbor)
 
