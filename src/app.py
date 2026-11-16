@@ -124,6 +124,11 @@ class MartianMapWindow(QMainWindow):
             QPushButton:pressed {
                 background-color: #172536;
             }
+            QPushButton:disabled {
+                background-color: #242C35;
+                color: #697582;
+                border-color: #34404C;
+            }
             QLineEdit {
                 background-color: #293B4F;
                 color: #E6EDF3;
@@ -292,7 +297,7 @@ class MartianMapWindow(QMainWindow):
         logger.info("Initial layer loading finished")
 
     def start_astronaut_selection(self):
-        
+        self.finish_waypoint_placement()
         self.route_selection_mode = False
         self.placement_mode = "astronaut"
         self.map_canvas.start_waypoint_selection()
@@ -307,12 +312,12 @@ class MartianMapWindow(QMainWindow):
         if self.placement_mode == "astronaut":
 
             self.handle_astronaut_location(point)
+            self.placement_mode = None
+            self.map_canvas.setMapTool(self.map_canvas.pan_tool)
 
         elif self.placement_mode == "waypoint":
 
             self.handle_waypoint_location(point)
-
-        self.placement_mode = None
 
     def handle_astronaut_location(self, point):
         destination = self.route_destination
@@ -373,11 +378,12 @@ class MartianMapWindow(QMainWindow):
             self.elevation_label.setText("Elevation: Unavailable")
 
         self.status_label.setText("Astronaut location set")
-        self.route_button.setEnabled(True)
+        self.route_button.setEnabled(self.pathfinder is not None and bool(self.waypoints))
         if destination is not None:
             self.plan_route(destination)
     
     def start_route_selection(self):
+        self.finish_waypoint_placement()
 
         if self.astronaut_position is None:
             self.status_label.setText(
@@ -477,7 +483,22 @@ class MartianMapWindow(QMainWindow):
             logger.exception("Route planning failed")
             self.status_label.setText("Route planning failed")
 
+    def finish_waypoint_placement(self):
+        """Discard any unsaved preview and return to navigation."""
+        if self.map_canvas.preview_marker is not None:
+            self.map_canvas.scene().removeItem(self.map_canvas.preview_marker)
+            self.map_canvas.preview_marker = None
+        if self.pending_waypoint is not None:
+            self.info_panel.hide()
+        self.pending_waypoint = None
+        self.placement_mode = None
+        self.save_waypoint_button.setEnabled(False)
+        self.map_canvas.setMapTool(self.map_canvas.pan_tool)
+
     def start_waypoint_selection(self):
+        self.finish_waypoint_placement()
+        self.selected_waypoint = None
+        self.info_panel.hide()
         self.route_selection_mode = False
         self.placement_mode = "waypoint"
         self.map_canvas.start_waypoint_selection()
@@ -487,8 +508,9 @@ class MartianMapWindow(QMainWindow):
         )
 
     def handle_waypoint_location(self, point):
+        replacing_preview = self.pending_waypoint is not None
         self.selected_waypoint = None
-        self.delete_waypoint_button.setEnabled(False)
+        self.delete_waypoint_button.setEnabled(True)
 
         # Get the selected coordinates in the canvas CRS.
         x = point.x()
@@ -591,9 +613,10 @@ class MartianMapWindow(QMainWindow):
 
         # Reset the name field for the new selection.
         self.waypoint_name_input.setReadOnly(False)
-        self.waypoint_name_input.clear()
         self.waypoint_description_input.setReadOnly(False)
-        self.waypoint_description_input.clear()
+        if not replacing_preview:
+            self.waypoint_name_input.clear()
+            self.waypoint_description_input.clear()
 
         # Enable saving now that a location has been selected.
         self.save_waypoint_button.setEnabled(True)
@@ -602,10 +625,15 @@ class MartianMapWindow(QMainWindow):
         self.info_panel.show()
 
         # Update the status bar.
-        self.status_label.setText("Waypoint placed — click Save")
+        self.status_label.setText("Preview — click to move, Save to keep, Delete to cancel")
 
 
     def delete_waypoint(self):
+        if self.placement_mode == "waypoint":
+            self.finish_waypoint_placement()
+            self.delete_waypoint_button.setEnabled(False)
+            self.status_label.setText("Waypoint cancelled")
+            return
         if self.selected_waypoint is None:
             return
 
@@ -619,6 +647,7 @@ class MartianMapWindow(QMainWindow):
             self.clear_planned_route()
 
         self.waypoints.remove(waypoint)
+        self.route_button.setEnabled(self.astronaut_position is not None and self.pathfinder is not None and bool(self.waypoints))
         logger.info("Deleted waypoint: %s", waypoint.get("name"))
         self.map_canvas.remove_waypoint_marker(waypoint)
 
@@ -657,10 +686,12 @@ class MartianMapWindow(QMainWindow):
         logger.info("Saving user waypoint: %s", name)
 
         self.waypoints.append(waypoint)
+        self.route_button.setEnabled(self.astronaut_position is not None and self.pathfinder is not None)
         self.map_canvas.save_waypoint_marker(waypoint)
 
         # Clear the pending waypoint.
         self.pending_waypoint = None
+        self.finish_waypoint_placement()
 
         self.selected_waypoint = waypoint
         self.delete_waypoint_button.setEnabled(True)
@@ -814,7 +845,6 @@ class MartianMapWindow(QMainWindow):
         layout.addWidget(self.traversability_button)
         
         # Shared legend card keeps markers and overall height stable between layers.
-        layout.addSpacing(10)
         self.map_legend = MapLegend()
         layout.addWidget(self.map_legend, 1)
 
@@ -835,7 +865,7 @@ class MartianMapWindow(QMainWindow):
             self.show_traversability_map
         )
 
-        layout.addSpacing(20)
+        layout.addSpacing(6)
 
         # Mission section
         mission_title = QLabel("MISSION PLANNING")
@@ -862,8 +892,8 @@ class MartianMapWindow(QMainWindow):
             font-weight: bold;
         """)
 
-        layout.addWidget(self.route_button)
         layout.addWidget(self.waypoint_button)
+        layout.addWidget(self.route_button)
         layout.addWidget(self.clear_route_button)
         self.route_summary_label = QLabel()
         self.route_summary_label.setTextFormat(Qt.PlainText)

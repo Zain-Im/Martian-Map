@@ -178,12 +178,10 @@ class MapCanvas(QgsMapCanvas):
         self.setMapTool(self.point_tool)
 
     def on_map_clicked(self, point, button):
-
+        if button != Qt.LeftButton:
+            return
         # Send the selected coordinates to the main window.
         self.location_picked.emit(point)
-
-        # Return to panning mode.
-        self.setMapTool(self.pan_tool)
 
     def save_waypoint_marker(self, waypoint):
 

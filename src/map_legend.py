@@ -3,7 +3,7 @@ from qgis.PyQt.QtCore import Qt, QPoint
 from qgis.PyQt.QtGui import QColor, QPainter, QPen, QPixmap, QPolygon
 from qgis.PyQt.QtWidgets import (
     QFrame, QLabel, QWidget, QVBoxLayout, QHBoxLayout,
-    QScrollArea, QSizePolicy
+    QScrollArea, QSizePolicy, QLayout
 )
 from qgis.core import QgsCategorizedSymbolRenderer
 from permanent_waypoints import PermanentWaypoints
@@ -14,7 +14,7 @@ class MapLegend(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName('mapLegend')
-        self.setMinimumHeight(240)
+        self.setMinimumHeight(264)
         self.setSizePolicy(
             QSizePolicy.Expanding,
             QSizePolicy.Expanding
@@ -31,16 +31,24 @@ class MapLegend(QFrame):
         ''')
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 14, 14, 14)
-        layout.setSpacing(10)
-        self.title = QLabel('Elevation · metres')
-        self.title.setStyleSheet('color: #E9A96B; font-size: 14px; font-weight: bold;')
-        layout.addWidget(self.title)
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.scroll.setFrameShape(QFrame.NoFrame)
         layout.addWidget(self.scroll, 1)
+        content = QWidget()
+        self.scroll.setWidget(content)
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(0, 0, 7, 0)
+        layout.setSpacing(10)
+        layout.setSizeConstraint(QLayout.SetMinAndMaxSize)
+        self.title = QLabel('Elevation · metres')
+        self.title.setWordWrap(True)
+        self.title.setStyleSheet('color: #E9A96B; font-size: 14px; font-weight: bold;')
+        layout.addWidget(self.title)
+        self.layer_details = QVBoxLayout()
+        layout.addLayout(self.layer_details)
         divider = QFrame()
         divider.setFixedHeight(1)
         divider.setStyleSheet('background-color: #34465A; border: none;')
@@ -53,6 +61,7 @@ class MapLegend(QFrame):
                              ('Astronaut', MapCanvas.ASTRONAUT_COLOR)]:
             layout.addWidget(self.swatch_row(title, color, circle=title == 'Astronaut',
                                             diamond=title != 'Astronaut'))
+        layout.addStretch()
 
     @staticmethod
     def swatch_row(text, color, circle=False, diamond=False):
@@ -134,8 +143,8 @@ class MapLegend(QFrame):
                 low, high = items[0].value, items[-1].value
                 stops = [((item.value-low)/(high-low), item.color.name()) for item in items]
                 layout.addWidget(self.scale(stops, f'{low:,.0f}', f'{high:,.0f}'))
-        layout.addStretch()
-        old = self.scroll.takeWidget()
+        old = self.layer_details.takeAt(0)
         if old is not None:
-            old.deleteLater()
-        self.scroll.setWidget(content)
+            old.widget().deleteLater()
+        self.layer_details.addWidget(content)
+        self.scroll.verticalScrollBar().setValue(0)
