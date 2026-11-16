@@ -14,7 +14,7 @@ class MapLegend(QFrame):
         self.setStyleSheet('''
             QFrame#mapLegend { background: #172330; border: 1px solid #34465A; border-radius: 8px; }
             QFrame#mapLegend QWidget { background: transparent; }
-            QFrame#mapLegend QLabel { color: #E6EDF3; font-size: 13px; border: none; }
+            QFrame#mapLegend QLabel { color: #E6EDF3; font-size: 13px; font-weight: bold; border: none; }
             QFrame#mapLegend QScrollArea { border: none; }
             QFrame#mapLegend QScrollBar:vertical { background: #172330; width: 6px; margin: 0; }
             QFrame#mapLegend QScrollBar::handle:vertical { background: #40566D; border-radius: 3px; min-height: 24px; }
@@ -76,7 +76,7 @@ class MapLegend(QFrame):
         for text, alignment in [(low, Qt.AlignLeft), (high, Qt.AlignRight)]:
             label = QLabel(text)
             label.setAlignment(alignment)
-            label.setStyleSheet('color: #9BAFC2; font-size: 12px;')
+            label.setStyleSheet('color: #9BAFC2; font-size: 12px; font-weight: bold;')
             labels.addWidget(label, 1)
         layout.addLayout(labels)
         return widget
@@ -91,7 +91,7 @@ class MapLegend(QFrame):
         if name == 'Optical':
             label = QLabel('Surface imagery\nUse the marker key below to identify locations.')
             label.setWordWrap(True)
-            label.setStyleSheet('color: #9BAFC2;')
+            label.setStyleSheet('color: #9BAFC2; font-weight: bold;')
             layout.addWidget(label)
         elif layer is None:
             layout.addWidget(QLabel('Layer unavailable'))
